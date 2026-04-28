@@ -4,7 +4,7 @@ import { LoginForm } from "@/components/login-form";
 import { getCurrentUser } from "@/lib/auth";
 
 export const metadata = {
-  title: "Login",
+  title: "Evidence Studio SLICE",
   description: "Acesso ao Gerador de Evidencias",
 };
 
