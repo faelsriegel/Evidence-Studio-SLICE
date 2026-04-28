@@ -150,10 +150,7 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
     ["EMPRESA",            form.sourceCompany],
     ["CNPJ",               form.sourceCnpj || "-"],
     ["REFERÊNCIA DE CONFORMIDADE", form.questionnaireTitle || "-"],
-    [
-      "ID / NÚMERO DE CONTROLE",
-      `${evidenceId || "-"} / ${form.evidenceNumber || "-"}`,
-    ],
+    ["NÚMERO DE CONTROLE EXTERNO", form.evidenceNumber || "-"],
     ...(form.evidenceTitle?.trim()
       ? [["REQUISITO / TÍTULO EXTERNO", form.evidenceTitle] as [string, string]]
       : [["REQUISITO / TÍTULO EXTERNO", "-"] as [string, string]]),
@@ -163,15 +160,17 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
     ...(form.observations?.trim() ? [["OBSERVAÇÕES", form.observations] as [string, string]] : []),
   ];
 
-  // Heights — pré-calcula linhas extras do campo de requisito/título externo
+  // Heights — pré-calcula linhas extras dos campos que podem quebrar em 2 linhas
   const availW = boxWidth - pad * 2;
   ctx.font = `400 ${bodySize}px system-ui, -apple-system, sans-serif`;
+  const referenciaValue = `REFERÊNCIA DE CONFORMIDADE: ${(form.questionnaireTitle || "-").toUpperCase()}`;
+  const referenciaLines = wrapText(ctx, referenciaValue, availW, 2);
   const hasTitulo = !!form.evidenceTitle?.trim();
   const tituloValue = hasTitulo
     ? `REQUISITO / TÍTULO EXTERNO: ${form.evidenceTitle.toUpperCase()}`
     : "REQUISITO / TÍTULO EXTERNO: -";
-  const tituloLines = wrapText(ctx, tituloValue, availW, 3);
-  const extraLines  = Math.max(0, tituloLines.length - 1);
+  const tituloLines = wrapText(ctx, tituloValue, availW, 2);
+  const extraLines  = Math.max(0, referenciaLines.length - 1) + Math.max(0, tituloLines.length - 1);
 
   const headerHeight = pad + lh * 1.35 + lh * 1.15 + pad * 0.7;
   const bodyHeight   = lh * 1.2 * (fields.length + extraLines) + pad;
@@ -248,7 +247,12 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
   const bodyStartY = sepY + lh * 1.1;
   let yOff = 0;
   fields.forEach(([label, value]) => {
-    if (label === "REQUISITO / TÍTULO EXTERNO") {
+    if (label === "REFERÊNCIA DE CONFORMIDADE") {
+      referenciaLines.forEach((line, li) => {
+        ctx.fillText(li === 0 ? line : `  ${line}`, x + pad, bodyStartY + lh * 1.2 * yOff);
+        yOff++;
+      });
+    } else if (label === "REQUISITO / TÍTULO EXTERNO") {
       tituloLines.forEach((line, li) => {
         // Na primeira sub-linha já temos o label incluído; nas demais, apenas continuação
         ctx.fillText(li === 0 ? line : `  ${line}`, x + pad, bodyStartY + lh * 1.2 * yOff);
