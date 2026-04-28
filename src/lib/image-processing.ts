@@ -32,6 +32,20 @@ function resolveOverlayCoordinates(
       return { x: right, y: bottom };
   }
 }
+
+function oppositeCorner(position: OverlayPosition): OverlayPosition {
+  switch (position) {
+    case "top-left":
+      return "bottom-right";
+    case "top-right":
+      return "bottom-left";
+    case "bottom-left":
+      return "top-right";
+    case "bottom-right":
+    default:
+      return "top-left";
+  }
+}
 /** Trunca texto com "…" se exceder maxWidth no contexto do canvas. */
 function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
   if (ctx.measureText(text).width <= maxWidth) return text;
@@ -133,30 +147,43 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
   const inset      = borderW + Math.max(2, Math.round(width * 0.002));
 
   const fields: [string, string][] = [
-    ["EMPRESA EMISSORA",    form.sourceCompany],
+    ["EMPRESA",            form.sourceCompany],
     ["CNPJ",               form.sourceCnpj || "-"],
+    ["REFERÊNCIA DE CONFORMIDADE", form.questionnaireTitle || "-"],
+    [
+      "ID / NÚMERO DE CONTROLE",
+      `${evidenceId || "-"} / ${form.evidenceNumber || "-"}`,
+    ],
+    ...(form.evidenceTitle?.trim()
+      ? [["REQUISITO / TÍTULO EXTERNO", form.evidenceTitle] as [string, string]]
+      : [["REQUISITO / TÍTULO EXTERNO", "-"] as [string, string]]),
     ["EMPRESA REQUISITANTE", form.targetCompany],
-    ...(form.evidenceTitle?.trim() ? [["TÍTULO EXTERNO", form.evidenceTitle] as [string, string]] : []),
-    ["NÚMERO DE CONTROLE EXTERNO", form.evidenceNumber],
-    ["DATA DA CAPTURA",    formatDateDisplay(form.imageDate)],
     ["RESPONSÁVEL",        form.responsibleName || "-"],
     ...(form.department ? [["ÁREA / DEPARTAMENTO", form.department] as [string, string]] : []),
+    ...(form.observations?.trim() ? [["OBSERVAÇÕES", form.observations] as [string, string]] : []),
   ];
 
-  // Heights — pré-calcula linhas extras do TÍTULO EXTERNO (se existir)
+  // Heights — pré-calcula linhas extras do campo de requisito/título externo
   const availW = boxWidth - pad * 2;
   ctx.font = `400 ${bodySize}px system-ui, -apple-system, sans-serif`;
   const hasTitulo = !!form.evidenceTitle?.trim();
-  const tituloValue = hasTitulo ? `TÍTULO EXTERNO: ${form.evidenceTitle.toUpperCase()}` : "";
-  const tituloLines = hasTitulo ? wrapText(ctx, tituloValue, availW, 3) : [];
+  const tituloValue = hasTitulo
+    ? `REQUISITO / TÍTULO EXTERNO: ${form.evidenceTitle.toUpperCase()}`
+    : "REQUISITO / TÍTULO EXTERNO: -";
+  const tituloLines = wrapText(ctx, tituloValue, availW, 3);
   const extraLines  = Math.max(0, tituloLines.length - 1);
 
   const headerHeight = pad + lh * 1.35 + lh * 1.15 + pad * 0.7;
   const bodyHeight   = lh * 1.2 * (fields.length + extraLines) + pad;
   const boxHeight    = Math.round(headerHeight + 1 + bodyHeight);
 
+  const preferredOverlayCorner = form.overlayPosition;
+  const safeOverlayCorner = preferredOverlayCorner === (form.logoPosition ?? "bottom-left")
+    ? oppositeCorner(form.logoPosition ?? "bottom-left")
+    : preferredOverlayCorner;
+
   const { x, y } = resolveOverlayCoordinates(
-    form.overlayPosition,
+    safeOverlayCorner,
     width,
     height,
     boxWidth,
@@ -221,7 +248,7 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
   const bodyStartY = sepY + lh * 1.1;
   let yOff = 0;
   fields.forEach(([label, value]) => {
-    if (label === "TÍTULO EXTERNO") {
+    if (label === "REQUISITO / TÍTULO EXTERNO") {
       tituloLines.forEach((line, li) => {
         // Na primeira sub-linha já temos o label incluído; nas demais, apenas continuação
         ctx.fillText(li === 0 ? line : `  ${line}`, x + pad, bodyStartY + lh * 1.2 * yOff);
@@ -247,15 +274,24 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
     ctx.restore();
   }
 
-  /* ── Logo Slice (marca d'água, canto inferior direito) ─────────────── */
+  /* ── Logo Slice (marca d'água, canto escolhido) ─────────────────────── */
   if (logoImage) {
     const logoMargin = Math.max(16, Math.round(width * 0.018));
     const logoW = Math.round(width * 0.14);
     const logoH = Math.round(logoW * (logoImage.naturalHeight / logoImage.naturalWidth));
+    const safeLogoCorner = form.logoPosition ?? "bottom-left";
+    const { x: logoX, y: logoY } = resolveOverlayCoordinates(
+      safeLogoCorner,
+      width,
+      height,
+      logoW,
+      logoH,
+      logoMargin,
+    );
     ctx.save();
     ctx.globalAlpha = 0.40;
     if (form.logoVariant === "dark") ctx.filter = "invert(1)";
-    ctx.drawImage(logoImage, width - logoW - logoMargin, height - logoH - logoMargin, logoW, logoH);
+    ctx.drawImage(logoImage, logoX, logoY, logoW, logoH);
     ctx.restore();
   }
 

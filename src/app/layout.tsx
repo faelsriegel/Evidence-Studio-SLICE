@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Manrope, Petrona, Source_Code_Pro, Space_Grotesk } from "next/font/google";
+import { Toaster } from "sonner";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
@@ -41,7 +42,10 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <Toaster position="top-center" richColors closeButton />
+        </Providers>
       </body>
     </html>
   );

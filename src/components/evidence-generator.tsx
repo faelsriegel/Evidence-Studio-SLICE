@@ -25,6 +25,7 @@ import { resolveBestImageDate } from "@/lib/metadata";
 import { formatDateInput, sanitizeForFileName } from "@/lib/utils";
 import { defaultFormData, useEvidenceStore } from "@/store/evidence-store";
 import { type EvidenceFormData, type OverlayPosition, type RedactRegion } from "@/types/evidence";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -116,11 +117,19 @@ const positionOptions: { label: string; value: OverlayPosition }[] = [
   { label: "Inferior direito", value: "bottom-right" },
 ];
 
-function buildDownloadName(form: EvidenceFormData): string {
+function buildDownloadName(form: EvidenceFormData, evidenceId?: string): string {
   const number = sanitizeForFileName(form.evidenceNumber || "SEM_NUMERO");
   const auditor = sanitizeForFileName(form.targetCompany || "SEM_AUDITORA");
-  const date = (form.imageDate || formatDateInput(new Date())).replace(/-/g, "");
-  return `EVIDENCIA_${number}_${auditor}_${date}.png`;
+  const id = sanitizeForFileName(evidenceId || "SEM_ID");
+  return `EVIDENCIA_${number}_${auditor}_${id}.png`;
+}
+
+function notifySuccess(message: string) {
+  toast.success(message);
+}
+
+function notifyError(message: string) {
+  toast.error(message);
 }
 
 function loadImage(file: File): Promise<HTMLImageElement> {
@@ -154,7 +163,6 @@ export function EvidenceGenerator() {
   const [fileName, setFileName] = useState<string>("");
   const [detectedDate, setDetectedDate] = useState<string>("");
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -261,7 +269,15 @@ export function EvidenceGenerator() {
     }
 
     try {
-      const previewId = peekEvidenceId(currentValues.targetCompany, currentValues.evidenceNumber, currentValues.imageDate, currentValues.evidenceAcronym);
+      const previewId = peekEvidenceId(
+        currentValues.targetCompany,
+        currentValues.evidenceTitle,
+        currentValues.evidenceNumber,
+        currentValues.imageDate,
+        currentValues.evidenceAcronym,
+        currentValues.forceSequence,
+        currentValues.manualSequence,
+      );
       const canvas = processEvidenceImage({ image: sourceImage, form: currentValues, logoImage, redactRegions, evidenceId: previewId });
       return canvas.toDataURL("image/png", 1);
     } catch {
@@ -269,13 +285,24 @@ export function EvidenceGenerator() {
     }
   }, [sourceImage, currentValues, logoImage, redactRegions, peekEvidenceId]);
 
-  const generatedName = useMemo(() => buildDownloadName(currentValues), [currentValues]);
+  const generatedName = useMemo(() => {
+    const previewId = peekEvidenceId(
+      currentValues.targetCompany,
+      currentValues.evidenceTitle,
+      currentValues.evidenceNumber,
+      currentValues.imageDate,
+      currentValues.evidenceAcronym,
+      currentValues.forceSequence,
+      currentValues.manualSequence,
+    );
+    return buildDownloadName(currentValues, previewId);
+  }, [currentValues, peekEvidenceId]);
 
   function applyPreset(values: Partial<EvidenceFormData>) {
     Object.entries(values).forEach(([key, value]) => {
       setValue(key as keyof EvidenceFormData, value as never, { shouldValidate: true });
     });
-    setStatusMessage("Preset aplicado com sucesso.");
+    notifySuccess("Preset aplicado com sucesso.");
   }
 
   function handleSavePreset() {
@@ -289,7 +316,7 @@ export function EvidenceGenerator() {
     }
     setPresetMode("idle");
     setPresetName("");
-    setStatusMessage(`Preset "${name}" salvo.`);
+    notifySuccess(`Preset "${name}" salvo.`);
   }
 
   /* fechar lightbox com Escape */
@@ -305,15 +332,13 @@ export function EvidenceGenerator() {
   }, [lightboxOpen, presetMode]);
 
   async function handleFileDrop(file: File) {
-    setStatusMessage("");
-
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-      setStatusMessage("Formato invalido. Envie PNG, JPG ou JPEG.");
+      notifyError("Formato invalido. Envie PNG, JPG ou JPEG.");
       return;
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      setStatusMessage("Arquivo muito grande. O limite atual e 20MB.");
+      notifyError("Arquivo muito grande. O limite atual e 20MB.");
       return;
     }
 
@@ -328,7 +353,7 @@ export function EvidenceGenerator() {
       setRedactRegions([]);
       setRedactMode(null);
     } catch {
-      setStatusMessage("Nao foi possivel ler a imagem selecionada.");
+      notifyError("Nao foi possivel ler a imagem selecionada.");
     }
   }
 
@@ -346,22 +371,29 @@ export function EvidenceGenerator() {
 
   const onSubmit = handleSubmit(async (formData) => {
     if (!sourceImage) {
-      setStatusMessage("Envie uma imagem antes de gerar a evidencia.");
+      notifyError("Envie uma imagem antes de gerar a evidencia.");
       return;
     }
 
     setIsProcessing(true);
-    setStatusMessage("");
 
     try {
-      const evId = nextEvidenceId(formData.targetCompany, formData.evidenceNumber, formData.imageDate, formData.evidenceAcronym);
+      const evId = nextEvidenceId(
+        formData.targetCompany,
+        formData.evidenceTitle,
+        formData.evidenceNumber,
+        formData.imageDate,
+        formData.evidenceAcronym,
+        formData.forceSequence,
+        formData.manualSequence,
+      );
       const canvas = processEvidenceImage({ image: sourceImage, form: formData, logoImage, redactRegions, evidenceId: evId });
-      const finalName = buildDownloadName(formData);
+      const finalName = buildDownloadName(formData, evId);
       downloadCanvas(canvas, finalName);
       saveConfiguration(formData);
-      setStatusMessage(`Evidencia gerada e baixada automaticamente: ${finalName}`);
+      notifySuccess(`Evidencia gerada e baixada automaticamente: ${finalName}`);
     } catch {
-      setStatusMessage("Falha ao processar a evidencia. Tente novamente.");
+      notifyError("Falha ao processar a evidencia. Tente novamente.");
     } finally {
       setIsProcessing(false);
     }
@@ -505,11 +537,11 @@ export function EvidenceGenerator() {
                       <p className="text-[11px] text-rose-400">Campo obrigatorio.</p>
                     )}
                   </F>
+                  <F label="Titulo do questionario" full>
+                    <Input id="questionnaireTitle" placeholder="Nome do questionario (opcional)" {...register("questionnaireTitle")} />
+                  </F>
                   <F label="Titulo da evidencia" full>
-                    <Input id="evidenceTitle" placeholder="Titulo que aparece no card" {...register("evidenceTitle", { required: true })} />
-                    {errors.evidenceTitle && (
-                      <p className="text-[11px] text-rose-400">Campo obrigatorio.</p>
-                    )}
+                    <Input id="evidenceTitle" placeholder="Enunciado / titulo da questao (opcional)" {...register("evidenceTitle")} />
                   </F>
                   <F label="Numero de controle">
                     <Input id="evidenceNumber" placeholder="14.1" {...register("evidenceNumber", { required: true })} />
@@ -535,16 +567,55 @@ export function EvidenceGenerator() {
                   <F label="Area / Departamento">
                     <Input id="department" {...register("department")} />
                   </F>
+                  <F label="Observacoes" full>
+                    <Input id="observations" placeholder="Texto opcional para observacoes" {...register("observations")} />
+                  </F>
                   <F label="Sigla do ID" hint="vazio = automatico" full>
                     <Input id="evidenceAcronym" placeholder="Ex: BRA" maxLength={6} {...register("evidenceAcronym")} />
                   </F>
                 </FieldGrid>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[12px] font-medium text-slate-200">Sequencial do ID</p>
+                      <p className="text-[11px] text-slate-500">
+                        Padrao: automatico por empresa + titulo + numero (independente da data).
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-slate-400">Forcar</span>
+                      <Switch
+                        checked={!!currentValues.forceSequence}
+                        onCheckedChange={(next) =>
+                          setValue("forceSequence", next, { shouldValidate: true })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[220px_1fr] sm:items-center">
+                    <Input
+                      id="manualSequence"
+                      type="number"
+                      min={1}
+                      max={999}
+                      step={1}
+                      disabled={!currentValues.forceSequence}
+                      placeholder="001"
+                      {...register("manualSequence")}
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Quando ativo, o final do ID usa este valor (ex.: 001, 002, 010).
+                    </p>
+                  </div>
+                </div>
               </Section>
 
               {/* Aparencia (colapsavel) */}
               <Section title="Aparencia do quadro" description="Posicao, fundo, logo e marca d'agua" collapsible defaultOpen={false}>
                 <F label="Posicao do quadro" full>
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {positionOptions.map((item) => {
                       const isActive = currentValues.overlayPosition === item.value;
                       return (
@@ -567,6 +638,9 @@ export function EvidenceGenerator() {
                       );
                     })}
                   </div>
+                  <p className="text-[11px] text-slate-500">
+                    Se coincidir com a logo, o quadro vai automaticamente para o canto oposto.
+                  </p>
                 </F>
 
                 <FieldGrid>
@@ -599,6 +673,33 @@ export function EvidenceGenerator() {
                     </div>
                   </F>
                 </FieldGrid>
+
+                <F label="Canto da logo Slice" full>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {positionOptions.map((item) => {
+                      const isActive = (currentValues.logoPosition ?? "bottom-left") === item.value;
+                      return (
+                        <button
+                          key={`logo-${item.value}`}
+                          type="button"
+                          title={item.label}
+                          onClick={() => setValue("logoPosition", item.value, { shouldValidate: true })}
+                          className={[
+                            "rounded-lg border px-2 py-2 text-[11px] font-medium transition",
+                            isActive
+                              ? "border-sky-500 bg-sky-500/10 text-sky-300"
+                              : "border-slate-700 text-slate-400 hover:border-slate-600 hover:bg-slate-800",
+                          ].join(" ")}
+                        >
+                          {item.label.replace("Superior ", "Sup. ").replace("Inferior ", "Inf. ")}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    A logo permanece no canto escolhido por voce.
+                  </p>
+                </F>
 
                 <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
                   <div className="flex items-center justify-between">
@@ -820,22 +921,6 @@ export function EvidenceGenerator() {
                     <p className="truncate text-[10px] text-slate-500 sm:max-w-xs">{generatedName}</p>
                   </div>
                 </div>
-                {statusMessage && (
-                  <p
-                    className={[
-                      "rounded-lg px-3 py-2 text-xs",
-                      statusMessage.startsWith("Falha") ||
-                      statusMessage.startsWith("Formato") ||
-                      statusMessage.startsWith("Arquivo") ||
-                      statusMessage.startsWith("Envie") ||
-                      statusMessage.startsWith("Nao")
-                        ? "bg-rose-950/50 text-rose-300 ring-1 ring-rose-800/40"
-                        : "bg-emerald-950/50 text-emerald-300 ring-1 ring-emerald-800/40",
-                    ].join(" ")}
-                  >
-                    {statusMessage}
-                  </p>
-                )}
               </>
             )}
           </CardContent>

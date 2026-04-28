@@ -15,17 +15,17 @@
 
 /**
  * Gera a chave de lote usada para detectar se é uma nova requisição ou
- * mais um print da mesma (empresa + controle + data).
+ * mais um print da mesma (empresa + titulo + controle).
  */
 export function buildBatchKey(
   targetCompany: string,
   evidenceNumber: string,
-  imageDate: string,
+  evidenceTitle: string,
 ): string {
   return [
     targetCompany.trim().toUpperCase(),
+    evidenceTitle.trim().toUpperCase(),
     evidenceNumber.trim(),
-    imageDate.trim(),
   ].join("|");
 }
 

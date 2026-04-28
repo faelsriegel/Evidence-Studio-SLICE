@@ -13,15 +13,20 @@ export const defaultFormData: EvidenceFormData = {
   sourceCompany: DEFAULT_SOURCE_COMPANY,
   sourceCnpj: DEFAULT_SOURCE_CNPJ,
   targetCompany: "EMPRESA AUDITORA",
+  questionnaireTitle: "",
   evidenceAcronym: "",
+  forceSequence: false,
+  manualSequence: "001",
   evidenceTitle: "",
   evidenceNumber: "14.1",
   imageDate: today,
   responsibleName: "DPO",
   department: "Seguranca da Informacao",
+  observations: "",
   watermarkEnabled: true,
   watermarkText: "USO EXCLUSIVO AUDITORIA",
   logoVariant: "white" as const,
+  logoPosition: "bottom-left",
   overlayPosition: "bottom-right",
   overlayBackgroundStyle: "translucent",
 };
@@ -30,7 +35,7 @@ interface EvidenceStore {
   lastFormData: EvidenceFormData;
   recentConfigurations: SavedConfiguration[];
   userPresets: UserPreset[];
-  /** Chave do lote atual (empresa+controle+data) para rastrear sequência */
+  /** Chave do lote atual (empresa+titulo+controle) para rastrear sequência */
   batchKey: string;
   /** Contador de sequência dentro do lote atual */
   batchSeq: number;
@@ -41,9 +46,25 @@ interface EvidenceStore {
   updatePreset: (id: string, name: string, data: Partial<EvidenceFormData>) => void;
   deletePreset: (id: string) => void;
   /** Gera o próximo ID e incrementa o contador de sequência */
-  nextEvidenceId: (targetCompany: string, evidenceNumber: string, imageDate: string, acronym?: string) => string;
+  nextEvidenceId: (
+    targetCompany: string,
+    evidenceTitle: string,
+    evidenceNumber: string,
+    imageDate: string,
+    acronym?: string,
+    forceSequence?: boolean,
+    manualSequence?: string,
+  ) => string;
   /** Espia o próximo ID sem incrementar (para preview) */
-  peekEvidenceId: (targetCompany: string, evidenceNumber: string, imageDate: string, acronym?: string) => string;
+  peekEvidenceId: (
+    targetCompany: string,
+    evidenceTitle: string,
+    evidenceNumber: string,
+    imageDate: string,
+    acronym?: string,
+    forceSequence?: boolean,
+    manualSequence?: string,
+  ) => string;
 }
 
 export const useEvidenceStore = create<EvidenceStore>()(
@@ -55,15 +76,23 @@ export const useEvidenceStore = create<EvidenceStore>()(
       batchKey: "",
       batchSeq: 0,
       setLastFormData: (data) => set({ lastFormData: data }),
-      nextEvidenceId: (targetCompany, evidenceNumber, imageDate, acronym) => {
-        const key = buildBatchKey(targetCompany, evidenceNumber, imageDate);
+      nextEvidenceId: (targetCompany, evidenceTitle, evidenceNumber, imageDate, acronym, forceSequence, manualSequence) => {
+        if (forceSequence) {
+          const forced = Math.min(999, Math.max(1, Number.parseInt(manualSequence || "1", 10) || 1));
+          return generateEvidenceId(targetCompany, evidenceNumber, imageDate, forced, acronym);
+        }
+        const key = buildBatchKey(targetCompany, evidenceNumber, evidenceTitle);
         const { batchKey, batchSeq } = get();
         const newSeq = key === batchKey ? batchSeq + 1 : 1;
         set({ batchKey: key, batchSeq: newSeq });
         return generateEvidenceId(targetCompany, evidenceNumber, imageDate, newSeq, acronym);
       },
-      peekEvidenceId: (targetCompany, evidenceNumber, imageDate, acronym) => {
-        const key = buildBatchKey(targetCompany, evidenceNumber, imageDate);
+      peekEvidenceId: (targetCompany, evidenceTitle, evidenceNumber, imageDate, acronym, forceSequence, manualSequence) => {
+        if (forceSequence) {
+          const forced = Math.min(999, Math.max(1, Number.parseInt(manualSequence || "1", 10) || 1));
+          return generateEvidenceId(targetCompany, evidenceNumber, imageDate, forced, acronym);
+        }
+        const key = buildBatchKey(targetCompany, evidenceNumber, evidenceTitle);
         const { batchKey, batchSeq } = get();
         const previewSeq = key === batchKey ? batchSeq + 1 : 1;
         return generateEvidenceId(targetCompany, evidenceNumber, imageDate, previewSeq, acronym);

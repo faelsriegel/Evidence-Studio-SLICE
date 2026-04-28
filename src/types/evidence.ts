@@ -12,15 +12,20 @@ export interface EvidenceFormData {
   sourceCompany: string;
   sourceCnpj?: string;
   targetCompany: string;
+  questionnaireTitle?: string;
   evidenceAcronym?: string;
+  forceSequence: boolean;
+  manualSequence?: string;
   evidenceTitle: string;
   evidenceNumber: string;
   imageDate: string;
   responsibleName?: string;
   department?: string;
+  observations?: string;
   watermarkEnabled: boolean;
   watermarkText: string;
   logoVariant: LogoVariant;
+  logoPosition: OverlayPosition;
   overlayPosition: OverlayPosition;
   overlayBackgroundStyle: OverlayBackgroundStyle;
 }
