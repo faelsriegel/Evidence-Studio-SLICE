@@ -1,10 +1,11 @@
 import { formatDateDisplay } from "@/lib/utils";
-import { type EvidenceFormData, type OverlayPosition } from "@/types/evidence";
+import { type EvidenceFormData, type OverlayPosition, type RedactRegion } from "@/types/evidence";
 
 interface ProcessOptions {
   image: HTMLImageElement;
   form: EvidenceFormData;
   logoImage?: HTMLImageElement | null;
+  redactRegions?: RedactRegion[];
 }
 
 function drawRoundedRect(
@@ -52,7 +53,7 @@ function resolveOverlayCoordinates(
   }
 }
 
-export function processEvidenceImage({ image, form, logoImage }: ProcessOptions): HTMLCanvasElement {
+export function processEvidenceImage({ image, form, logoImage, redactRegions }: ProcessOptions): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   const width = image.naturalWidth;
   const height = image.naturalHeight;
@@ -65,6 +66,37 @@ export function processEvidenceImage({ image, form, logoImage }: ProcessOptions)
   }
 
   ctx.drawImage(image, 0, 0, width, height);
+
+  /* ── Redact regions (blur / pixelate) ───────────────────────────────── */
+  if (redactRegions && redactRegions.length > 0) {
+    for (const { x, y, w, h, type } of redactRegions) {
+      if (w < 2 || h < 2) continue;
+      if (type === "pixelate") {
+        const block = Math.max(8, Math.round(Math.min(w, h) * 0.07));
+        for (let bx = x; bx < x + w; bx += block) {
+          for (let by = y; by < y + h; by += block) {
+            const bw = Math.min(block, x + w - bx);
+            const bh = Math.min(block, y + h - by);
+            const pixel = ctx.getImageData(Math.floor(bx + bw / 2), Math.floor(by + bh / 2), 1, 1).data;
+            ctx.fillStyle = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
+            ctx.fillRect(bx, by, bw, bh);
+          }
+        }
+      } else {
+        // blur: copy region to offscreen canvas, draw back with filter
+        const offscreen = document.createElement("canvas");
+        offscreen.width = w;
+        offscreen.height = h;
+        const offCtx = offscreen.getContext("2d")!;
+        offCtx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+        const blurRadius = Math.max(6, Math.round(Math.min(w, h) * 0.05));
+        ctx.save();
+        ctx.filter = `blur(${blurRadius}px)`;
+        ctx.drawImage(offscreen, x, y);
+        ctx.restore();
+      }
+    }
+  }
 
   const margin = Math.max(20, Math.round(width * 0.02));
   const boxWidth = Math.round(width * 0.44);

@@ -8,7 +8,9 @@ import {
   Building2,
   CalendarDays,
   Download,
+  EyeOff,
   FileImage,
+  Grid3X3,
   History,
   ImageIcon,
   Maximize2,
@@ -17,6 +19,7 @@ import {
   ShieldCheck,
   Stamp,
   Trash2,
+  Undo2,
   Upload,
   User,
   X,
@@ -25,7 +28,7 @@ import { processEvidenceImage } from "@/lib/image-processing";
 import { resolveBestImageDate } from "@/lib/metadata";
 import { formatDateInput, sanitizeForFileName } from "@/lib/utils";
 import { defaultFormData, useEvidenceStore } from "@/store/evidence-store";
-import { type EvidenceFormData, type OverlayPosition, type UserPreset } from "@/types/evidence";
+import { type EvidenceFormData, type OverlayPosition, type RedactRegion, type UserPreset } from "@/types/evidence";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -150,6 +153,12 @@ export function EvidenceGenerator() {
   /* lightbox */
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
+  /* redact tool */
+  const imgWrapperRef = useRef<HTMLDivElement>(null);
+  const [redactMode, setRedactMode] = useState<"blur" | "pixelate" | null>(null);
+  const [redactRegions, setRedactRegions] = useState<RedactRegion[]>([]);
+  const [drawing, setDrawing] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
+
   /* logo pre-carregado para o canvas */
   const [logoImage, setLogoImage] = useState<HTMLImageElement | null>(null);
   useEffect(() => {
@@ -203,12 +212,12 @@ export function EvidenceGenerator() {
     }
 
     try {
-      const canvas = processEvidenceImage({ image: sourceImage, form: currentValues, logoImage });
+      const canvas = processEvidenceImage({ image: sourceImage, form: currentValues, logoImage, redactRegions });
       return canvas.toDataURL("image/png", 1);
     } catch {
       return "";
     }
-  }, [sourceImage, currentValues, logoImage]);
+  }, [sourceImage, currentValues, logoImage, redactRegions]);
 
   const hasHistory = recentConfigurations.length > 0;
   const generatedName = useMemo(() => buildDownloadName(currentValues), [currentValues]);
@@ -314,6 +323,8 @@ export function EvidenceGenerator() {
       setFileName(file.name);
       setDetectedDate(parsedDate);
       setValue("imageDate", parsedDate, { shouldValidate: true });
+      setRedactRegions([]);
+      setRedactMode(null);
     } catch {
       setStatusMessage("Nao foi possivel ler a imagem selecionada.");
     }
@@ -341,7 +352,7 @@ export function EvidenceGenerator() {
     setStatusMessage("");
 
     try {
-      const canvas = processEvidenceImage({ image: sourceImage, form: formData, logoImage });
+      const canvas = processEvidenceImage({ image: sourceImage, form: formData, logoImage, redactRegions });
       const finalName = buildDownloadName(formData);
       downloadCanvas(canvas, finalName);
       saveConfiguration(formData);
@@ -813,24 +824,147 @@ export function EvidenceGenerator() {
               </div>
             ) : (
               <div className="flex h-full flex-col gap-3">
-                <div className="group relative flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                {/* ── Redact toolbar ──────────────────────────────── */}
+                <div className="flex items-center gap-1.5 rounded-xl border border-slate-700/60 bg-slate-900/60 px-3 py-1.5">
+                  <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Redacao</span>
                   <button
                     type="button"
-                    onClick={() => setLightboxOpen(true)}
-                    title="Abrir em tela cheia"
-                    className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900/80 text-slate-400 opacity-0 ring-1 ring-slate-700 transition hover:text-white group-hover:opacity-100"
+                    onClick={() => setRedactMode(m => m === "blur" ? null : "blur")}
+                    className={[
+                      "flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition",
+                      redactMode === "blur"
+                        ? "border-sky-500 bg-sky-500/15 text-sky-300"
+                        : "border-slate-700 text-slate-400 hover:border-sky-700 hover:text-sky-300",
+                    ].join(" ")}
                   >
-                    <Maximize2 size={14} />
+                    <EyeOff size={11} /> Desfocar
                   </button>
-                  <NextImage
-                    src={previewUrl}
-                    alt="Preview da evidencia processada"
-                    width={sourceImage?.naturalWidth ?? 1400}
-                    height={sourceImage?.naturalHeight ?? 900}
-                    unoptimized
-                    onClick={() => setLightboxOpen(true)}
-                    className="h-auto max-h-[65vh] w-auto cursor-zoom-in rounded-xl shadow-2xl shadow-black/50 transition hover:brightness-105"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setRedactMode(m => m === "pixelate" ? null : "pixelate")}
+                    className={[
+                      "flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition",
+                      redactMode === "pixelate"
+                        ? "border-amber-500 bg-amber-500/15 text-amber-300"
+                        : "border-slate-700 text-slate-400 hover:border-amber-700 hover:text-amber-300",
+                    ].join(" ")}
+                  >
+                    <Grid3X3 size={11} /> Pixelar
+                  </button>
+                  <div className="ml-auto flex gap-1">
+                    <button
+                      type="button"
+                      title="Desfazer última região"
+                      onClick={() => setRedactRegions(r => r.slice(0, -1))}
+                      disabled={redactRegions.length === 0}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      <Undo2 size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Limpar todas as regiões"
+                      onClick={() => { setRedactRegions([]); setRedactMode(null); }}
+                      disabled={redactRegions.length === 0}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-rose-600 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+                <div className="group relative flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                  {!redactMode && (
+                    <button
+                      type="button"
+                      onClick={() => setLightboxOpen(true)}
+                      title="Abrir em tela cheia"
+                      className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900/80 text-slate-400 opacity-0 ring-1 ring-slate-700 transition hover:text-white group-hover:opacity-100"
+                    >
+                      <Maximize2 size={14} />
+                    </button>
+                  )}
+                  {redactMode && (
+                    <div className="absolute left-3 top-3 z-10 rounded-lg bg-slate-900/90 px-2.5 py-1 text-[11px] font-medium text-slate-300 ring-1 ring-slate-700">
+                      {redactMode === "blur" ? "💧 Arraste para desfocar" : "🔳 Arraste para pixelar"}
+                    </div>
+                  )}
+                  <div className="relative inline-block" ref={imgWrapperRef}>
+                    <NextImage
+                      src={previewUrl}
+                      alt="Preview da evidencia processada"
+                      width={sourceImage?.naturalWidth ?? 1400}
+                      height={sourceImage?.naturalHeight ?? 900}
+                      unoptimized
+                      onClick={() => !redactMode && setLightboxOpen(true)}
+                      className={`h-auto max-h-[58vh] w-auto rounded-xl shadow-2xl shadow-black/50 transition ${
+                        redactMode ? "cursor-crosshair" : "cursor-zoom-in hover:brightness-105"
+                      }`}
+                    />
+                    {/* Redact overlay — visible + interactive when in redact mode */}
+                    <div
+                      className="absolute inset-0 rounded-xl"
+                      style={{
+                        cursor: redactMode ? "crosshair" : "default",
+                        pointerEvents: redactMode ? "auto" : "none",
+                      }}
+                      onMouseDown={(e) => {
+                        if (!redactMode || !sourceImage) return;
+                        const rect = imgWrapperRef.current?.getBoundingClientRect();
+                        if (!rect) return;
+                        const sx = Math.round(((e.clientX - rect.left) / rect.width) * sourceImage.naturalWidth);
+                        const sy = Math.round(((e.clientY - rect.top) / rect.height) * sourceImage.naturalHeight);
+                        setDrawing({ sx, sy, ex: sx, ey: sy });
+                      }}
+                      onMouseMove={(e) => {
+                        if (!drawing || !sourceImage) return;
+                        const rect = imgWrapperRef.current?.getBoundingClientRect();
+                        if (!rect) return;
+                        const ex = Math.round(((e.clientX - rect.left) / rect.width) * sourceImage.naturalWidth);
+                        const ey = Math.round(((e.clientY - rect.top) / rect.height) * sourceImage.naturalHeight);
+                        setDrawing(d => d ? { ...d, ex, ey } : null);
+                      }}
+                      onMouseUp={() => {
+                        if (!drawing || !redactMode) return;
+                        const x = Math.min(drawing.sx, drawing.ex);
+                        const y = Math.min(drawing.sy, drawing.ey);
+                        const w = Math.abs(drawing.ex - drawing.sx);
+                        const h = Math.abs(drawing.ey - drawing.sy);
+                        if (w > 8 && h > 8) {
+                          setRedactRegions(r => [...r, { x, y, w, h, type: redactMode }]);
+                        }
+                        setDrawing(null);
+                      }}
+                      onMouseLeave={() => setDrawing(null)}
+                    >
+                      {/* Saved regions */}
+                      {sourceImage && redactRegions.map((r, i) => (
+                        <div
+                          key={i}
+                          className="absolute border-2 border-dashed"
+                          style={{
+                            left: `${(r.x / sourceImage.naturalWidth) * 100}%`,
+                            top: `${(r.y / sourceImage.naturalHeight) * 100}%`,
+                            width: `${(r.w / sourceImage.naturalWidth) * 100}%`,
+                            height: `${(r.h / sourceImage.naturalHeight) * 100}%`,
+                            borderColor: r.type === "blur" ? "#38bdf8" : "#f59e0b",
+                            backgroundColor: r.type === "blur" ? "rgba(56,189,248,0.12)" : "rgba(245,158,11,0.12)",
+                          }}
+                        />
+                      ))}
+                      {/* In-progress rect */}
+                      {drawing && sourceImage && (
+                        <div
+                          className="absolute border-2 border-dashed border-white/80 bg-white/10"
+                          style={{
+                            left: `${(Math.min(drawing.sx, drawing.ex) / sourceImage.naturalWidth) * 100}%`,
+                            top: `${(Math.min(drawing.sy, drawing.ey) / sourceImage.naturalHeight) * 100}%`,
+                            width: `${(Math.abs(drawing.ex - drawing.sx) / sourceImage.naturalWidth) * 100}%`,
+                            height: `${(Math.abs(drawing.ey - drawing.sy) / sourceImage.naturalHeight) * 100}%`,
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <InfoChip

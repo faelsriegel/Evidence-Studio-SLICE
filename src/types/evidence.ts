@@ -34,3 +34,11 @@ export interface UserPreset {
   createdAt: string;
   data: Partial<EvidenceFormData>;
 }
+
+export interface RedactRegion {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  type: "blur" | "pixelate";
+}
