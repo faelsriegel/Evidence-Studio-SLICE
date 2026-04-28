@@ -156,6 +156,7 @@ export function EvidenceGenerator() {
     userPresets,
     savePreset,
     updatePreset,
+    deletePreset,
     nextEvidenceId,
     peekEvidenceId,
   } = useEvidenceStore();
@@ -319,6 +320,24 @@ export function EvidenceGenerator() {
     notifySuccess(`Preset "${name}" salvo.`);
   }
 
+  function handleDeletePreset() {
+    if (!selectedPresetId) {
+      notifyError("Selecione um preset para excluir.");
+      return;
+    }
+    const preset = userPresets.find((p) => p.id === selectedPresetId);
+    if (!preset) {
+      notifyError("Preset selecionado nao encontrado.");
+      return;
+    }
+    const confirmed = window.confirm(`Deseja excluir o preset "${preset.name}"?`);
+    if (!confirmed) return;
+    deletePreset(selectedPresetId);
+    setSelectedPresetId("");
+    setPresetMode("idle");
+    notifySuccess(`Preset "${preset.name}" excluido.`);
+  }
+
   /* fechar lightbox com Escape */
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -461,6 +480,16 @@ export function EvidenceGenerator() {
               >
                 <BookmarkPlus size={13} />
                 Novo
+              </button>
+              <button
+                type="button"
+                title="Excluir preset selecionado"
+                onClick={handleDeletePreset}
+                disabled={!selectedPresetId}
+                className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[11px] font-medium text-slate-300 transition hover:border-rose-600/50 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Trash2 size={13} />
+                Excluir
               </button>
             </div>
           </CardHeader>
