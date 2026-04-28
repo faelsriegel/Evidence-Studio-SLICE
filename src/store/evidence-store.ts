@@ -13,13 +13,15 @@ export const defaultFormData: EvidenceFormData = {
   sourceCompany: DEFAULT_SOURCE_COMPANY,
   sourceCnpj: DEFAULT_SOURCE_CNPJ,
   targetCompany: "EMPRESA AUDITORA",
-  evidenceTitle: "Comprovacao de controle de seguranca",
+  evidenceAcronym: "",
+  evidenceTitle: "",
   evidenceNumber: "14.1",
   imageDate: today,
-  responsibleName: "Infraestrutura TI",
+  responsibleName: "DPO",
   department: "Seguranca da Informacao",
-  watermarkEnabled: false,
-  watermarkText: "CONFIDENCIAL",
+  watermarkEnabled: true,
+  watermarkText: "USO EXCLUSIVO AUDITORIA",
+  logoVariant: "white" as const,
   overlayPosition: "bottom-right",
   overlayBackgroundStyle: "translucent",
 };
@@ -39,9 +41,9 @@ interface EvidenceStore {
   updatePreset: (id: string, name: string, data: Partial<EvidenceFormData>) => void;
   deletePreset: (id: string) => void;
   /** Gera o próximo ID e incrementa o contador de sequência */
-  nextEvidenceId: (targetCompany: string, evidenceNumber: string, imageDate: string) => string;
+  nextEvidenceId: (targetCompany: string, evidenceNumber: string, imageDate: string, acronym?: string) => string;
   /** Espia o próximo ID sem incrementar (para preview) */
-  peekEvidenceId: (targetCompany: string, evidenceNumber: string, imageDate: string) => string;
+  peekEvidenceId: (targetCompany: string, evidenceNumber: string, imageDate: string, acronym?: string) => string;
 }
 
 export const useEvidenceStore = create<EvidenceStore>()(
@@ -53,18 +55,18 @@ export const useEvidenceStore = create<EvidenceStore>()(
       batchKey: "",
       batchSeq: 0,
       setLastFormData: (data) => set({ lastFormData: data }),
-      nextEvidenceId: (targetCompany, evidenceNumber, imageDate) => {
+      nextEvidenceId: (targetCompany, evidenceNumber, imageDate, acronym) => {
         const key = buildBatchKey(targetCompany, evidenceNumber, imageDate);
         const { batchKey, batchSeq } = get();
         const newSeq = key === batchKey ? batchSeq + 1 : 1;
         set({ batchKey: key, batchSeq: newSeq });
-        return generateEvidenceId(targetCompany, evidenceNumber, imageDate, newSeq);
+        return generateEvidenceId(targetCompany, evidenceNumber, imageDate, newSeq, acronym);
       },
-      peekEvidenceId: (targetCompany, evidenceNumber, imageDate) => {
+      peekEvidenceId: (targetCompany, evidenceNumber, imageDate, acronym) => {
         const key = buildBatchKey(targetCompany, evidenceNumber, imageDate);
         const { batchKey, batchSeq } = get();
         const previewSeq = key === batchKey ? batchSeq + 1 : 1;
-        return generateEvidenceId(targetCompany, evidenceNumber, imageDate, previewSeq);
+        return generateEvidenceId(targetCompany, evidenceNumber, imageDate, previewSeq, acronym);
       },
       saveConfiguration: (data) => {
         const stamp = new Date().toISOString();

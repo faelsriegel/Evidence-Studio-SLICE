@@ -6,29 +6,25 @@ import { useForm, useWatch } from "react-hook-form";
 import {
   BookmarkPlus,
   Building2,
-  CalendarDays,
+  ChevronDown,
   Download,
   EyeOff,
   FileImage,
   Grid3X3,
-  History,
   ImageIcon,
   Maximize2,
-  MoveDiagonal2,
-  Pencil,
   ShieldCheck,
   Stamp,
   Trash2,
   Undo2,
   Upload,
-  User,
   X,
 } from "lucide-react";
 import { processEvidenceImage } from "@/lib/image-processing";
 import { resolveBestImageDate } from "@/lib/metadata";
 import { formatDateInput, sanitizeForFileName } from "@/lib/utils";
 import { defaultFormData, useEvidenceStore } from "@/store/evidence-store";
-import { type EvidenceFormData, type OverlayPosition, type RedactRegion, type UserPreset } from "@/types/evidence";
+import { type EvidenceFormData, type OverlayPosition, type RedactRegion } from "@/types/evidence";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -38,54 +34,74 @@ import { Switch } from "@/components/ui/switch";
 
 /* ── helpers de layout ──────────────────────────────────────────────────── */
 
-function SectionLabel({ step, children }: { step: string; children: React.ReactNode }) {
+function Section({
+  title,
+  description,
+  children,
+  collapsible,
+  defaultOpen = true,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const expanded = collapsible ? open : true;
   return (
-    <div className="mb-2.5 flex items-center gap-2">
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-[10px] font-bold text-sky-400 ring-1 ring-sky-500/30">
-        {step}
-      </span>
-      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{children}</span>
-    </div>
+    <section className="border-t border-slate-800/70 pt-4 first:border-t-0 first:pt-0">
+      {collapsible ? (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+          aria-expanded={open}
+        >
+          <div className="flex items-baseline gap-3">
+            <h3 className="text-[13px] font-semibold tracking-tight text-slate-100">{title}</h3>
+            {description && <p className="text-[11px] text-slate-500">{description}</p>}
+          </div>
+          <ChevronDown
+            size={14}
+            className={`shrink-0 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+      ) : (
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="text-[13px] font-semibold tracking-tight text-slate-100">{title}</h3>
+          {description && <p className="text-[11px] text-slate-500">{description}</p>}
+        </div>
+      )}
+      {expanded && <div className="mt-3 space-y-3">{children}</div>}
+    </section>
   );
 }
 
-function FieldGroup({ children }: { children: React.ReactNode }) {
-  return <div className="grid gap-2.5 sm:grid-cols-2">{children}</div>;
+function FieldGrid({ children }: { children: React.ReactNode }) {
+  return <div className="grid gap-3 sm:grid-cols-2">{children}</div>;
 }
 
 function F({
   label,
   full,
+  hint,
   children,
 }: {
   label: string;
   full?: boolean;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className={full ? "sm:col-span-2" : ""}>
-      <Label>{label}</Label>
+    <div className={[full ? "sm:col-span-2" : "", "space-y-1.5"].filter(Boolean).join(" ")}>
+      <div className="flex items-center justify-between">
+        <Label className="m-0 text-[11px] font-medium normal-case tracking-normal text-slate-300">
+          {label}
+        </Label>
+        {hint && <span className="text-[10px] text-slate-500">{hint}</span>}
+      </div>
       {children}
-    </div>
-  );
-}
-
-function InfoChip({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5 rounded-xl bg-slate-800/60 px-3 py-2 ring-1 ring-slate-700/50">
-      <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500">
-        {icon}
-        {label}
-      </span>
-      <span className="truncate text-xs font-medium text-slate-200">{value}</span>
     </div>
   );
 }
@@ -128,12 +144,9 @@ export function EvidenceGenerator() {
     lastFormData,
     setLastFormData,
     saveConfiguration,
-    recentConfigurations,
-    loadConfiguration,
     userPresets,
     savePreset,
     updatePreset,
-    deletePreset,
     nextEvidenceId,
     peekEvidenceId,
   } = useEvidenceStore();
@@ -143,14 +156,12 @@ export function EvidenceGenerator() {
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedHistoryId, setSelectedHistoryId] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
 
   /* preset manager state */
   const [selectedPresetId, setSelectedPresetId] = useState<string>("");
   const [presetMode, setPresetMode] = useState<"idle" | "new" | "edit">("idle");
   const [presetName, setPresetName] = useState<string>("");
-  const importPresetRef = useRef<HTMLInputElement>(null);
 
   /* lightbox */
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -164,6 +175,38 @@ export function EvidenceGenerator() {
   const [redactMode, setRedactMode] = useState<"blur" | "pixelate" | null>(null);
   const [redactRegions, setRedactRegions] = useState<RedactRegion[]>([]);
   const [drawing, setDrawing] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
+
+  /* listeners globais durante o desenho de regiao */
+  useEffect(() => {
+    if (!drawing || !redactMode || !sourceImage) return;
+    const onMove = (e: MouseEvent) => {
+      const rect = imgWrapperRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const ex = Math.round(((e.clientX - rect.left) / rect.width) * sourceImage.naturalWidth);
+      const ey = Math.round(((e.clientY - rect.top) / rect.height) * sourceImage.naturalHeight);
+      setDrawing(d => d ? { ...d, ex, ey } : null);
+    };
+    const onUp = () => {
+      setDrawing(d => {
+        if (!d) return null;
+        const x = Math.min(d.sx, d.ex);
+        const y = Math.min(d.sy, d.ey);
+        const w = Math.abs(d.ex - d.sx);
+        const h = Math.abs(d.ey - d.sy);
+        if (w > 8 && h > 8 && redactMode) {
+          setRedactRegions(r => [...r, { x, y, w, h, type: redactMode }]);
+        }
+        return null;
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawing !== null, redactMode, sourceImage]);
 
   /* logo pre-carregado para o canvas */
   const [logoImage, setLogoImage] = useState<HTMLImageElement | null>(null);
@@ -218,7 +261,7 @@ export function EvidenceGenerator() {
     }
 
     try {
-      const previewId = peekEvidenceId(currentValues.targetCompany, currentValues.evidenceNumber, currentValues.imageDate);
+      const previewId = peekEvidenceId(currentValues.targetCompany, currentValues.evidenceNumber, currentValues.imageDate, currentValues.evidenceAcronym);
       const canvas = processEvidenceImage({ image: sourceImage, form: currentValues, logoImage, redactRegions, evidenceId: previewId });
       return canvas.toDataURL("image/png", 1);
     } catch {
@@ -226,7 +269,6 @@ export function EvidenceGenerator() {
     }
   }, [sourceImage, currentValues, logoImage, redactRegions, peekEvidenceId]);
 
-  const hasHistory = recentConfigurations.length > 0;
   const generatedName = useMemo(() => buildDownloadName(currentValues), [currentValues]);
 
   function applyPreset(values: Partial<EvidenceFormData>) {
@@ -234,12 +276,6 @@ export function EvidenceGenerator() {
       setValue(key as keyof EvidenceFormData, value as never, { shouldValidate: true });
     });
     setStatusMessage("Preset aplicado com sucesso.");
-  }
-
-  function handleApplySelectedPreset() {
-    const preset = userPresets.find((p) => p.id === selectedPresetId);
-    if (!preset) return;
-    applyPreset(preset.data);
   }
 
   function handleSavePreset() {
@@ -256,58 +292,17 @@ export function EvidenceGenerator() {
     setStatusMessage(`Preset "${name}" salvo.`);
   }
 
-  function handleDeletePreset() {
-    const preset = userPresets.find((p) => p.id === selectedPresetId);
-    if (!preset) return;
-    deletePreset(selectedPresetId);
-    setSelectedPresetId("");
-    setPresetMode("idle");
-    setStatusMessage(`Preset "${preset.name}" removido.`);
-  }
-
-  function handleExportPresets() {
-    const blob = new Blob([JSON.stringify(userPresets, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `evidence-presets-${formatDateInput(new Date())}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function handleImportPresets(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const imported = JSON.parse(ev.target?.result as string) as UserPreset[];
-        if (!Array.isArray(imported)) throw new Error("formato invalido");
-        const existingIds = new Set(userPresets.map((p) => p.id));
-        imported.forEach((p) => {
-          if (p.id && p.name && p.data && !existingIds.has(p.id)) {
-            savePreset(p.name, p.data);
-          }
-        });
-        setStatusMessage(`${imported.length} preset(s) importado(s).`);
-      } catch {
-        setStatusMessage("Arquivo JSON invalido para importacao.");
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
-  }
-
   /* fechar lightbox com Escape */
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") { setLightboxOpen(false); setLbZoom(1); setLbOffset({ x: 0, y: 0 }); }
+      if (e.key === "Escape") {
+        if (presetMode !== "idle") { setPresetMode("idle"); setPresetName(""); return; }
+        setLightboxOpen(false); setLbZoom(1); setLbOffset({ x: 0, y: 0 });
+      }
     }
-    if (lightboxOpen) window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [lightboxOpen]);
+  }, [lightboxOpen, presetMode]);
 
   async function handleFileDrop(file: File) {
     setStatusMessage("");
@@ -359,7 +354,7 @@ export function EvidenceGenerator() {
     setStatusMessage("");
 
     try {
-      const evId = nextEvidenceId(formData.targetCompany, formData.evidenceNumber, formData.imageDate);
+      const evId = nextEvidenceId(formData.targetCompany, formData.evidenceNumber, formData.imageDate, formData.evidenceAcronym);
       const canvas = processEvidenceImage({ image: sourceImage, form: formData, logoImage, redactRegions, evidenceId: evId });
       const finalName = buildDownloadName(formData);
       downloadCanvas(canvas, finalName);
@@ -373,187 +368,79 @@ export function EvidenceGenerator() {
   });
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-88px)] w-full max-w-[1500px] flex-col px-4 py-3 text-sm lg:px-6">
+    <div className="mx-auto flex min-h-[calc(100dvh-88px)] w-full max-w-[1120px] flex-col px-3 py-3 text-sm sm:px-4">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-700/50 bg-slate-900/80 px-5 py-3.5 shadow-lg shadow-black/25 backdrop-blur">
+      <header className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 backdrop-blur">
         <div>
-          <span className="mb-1.5 inline-flex items-center gap-1.5 rounded-full bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-widest text-sky-400 ring-1 ring-sky-500/20">
-            <ShieldCheck size={11} />
+          <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-sky-400 ring-1 ring-sky-500/20">
+            <ShieldCheck size={10} />
             DPO&nbsp;•&nbsp;LGPD&nbsp;•&nbsp;Seguranca da Informacao
           </span>
-          <h1 className="text-lg font-bold tracking-tight text-slate-50">
+          <h1 className="text-base font-bold tracking-tight text-slate-50">
             Gerador Corporativo de Evidencias
           </h1>
           <p className="text-xs text-slate-400">
             Padronize evidencias formais para auditoria, compliance e questionarios de seguranca.
           </p>
         </div>
-        <Button variant="outline" type="button" onClick={() => reset(defaultFormData)} className="shrink-0">
-          Resetar formulario
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" type="button" onClick={() => reset(defaultFormData)} className="shrink-0">
+            Resetar formulario
+          </Button>
+        </div>
       </header>
 
-      {/* ── Two-column layout ───────────────────────────────────────────────── */}
-      <main className="grid min-h-0 flex-1 gap-3 pb-3 lg:grid-cols-[460px_1fr]">
+      {/* ── Stacked studio layout ────────────────────────────────────────────── */}
+      <main className="flex flex-col gap-3 pb-3">
 
-        {/* ── Left: Form card ─────────────────────────────────────────────── */}
-        <Card className="flex min-h-0 flex-col overflow-hidden border-slate-700/50 shadow-lg shadow-black/25">
-          <CardHeader className="shrink-0 bg-slate-900/60">
-            <CardTitle className="flex items-center gap-2.5 text-sm">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/25">
-                <FileImage size={14} />
-              </span>
+        {/* ── Top: Form card ──────────────────────────────────────────────── */}
+        <Card className="order-1 flex flex-col overflow-hidden border-slate-800 bg-slate-900/70">
+          <CardHeader className="flex flex-col gap-3 border-b border-slate-800 bg-slate-900/80 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <FileImage size={15} className="text-sky-400" />
               Configuracoes da evidencia
             </CardTitle>
+            <div className="flex items-center gap-2">
+              <Select
+                className="h-8 w-44 text-xs"
+                value={selectedPresetId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setSelectedPresetId(id);
+                  setPresetMode("idle");
+                  if (id) {
+                    const preset = userPresets.find((p) => p.id === id);
+                    if (preset) applyPreset(preset.data);
+                  }
+                }}
+              >
+                <option value="">
+                  {userPresets.length === 0 ? "Nenhum preset" : "Aplicar preset..."}
+                </option>
+                {userPresets.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </Select>
+              <button
+                type="button"
+                title="Salvar configuracao atual como preset"
+                onClick={() => { setPresetMode("new"); setPresetName(""); }}
+                className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[11px] font-medium text-slate-300 transition hover:border-sky-600/50 hover:text-sky-300"
+              >
+                <BookmarkPlus size={13} />
+                Novo
+              </button>
+            </div>
           </CardHeader>
 
-          <CardContent className="min-h-0 flex-1 overflow-y-auto">
-            <form className="space-y-5" onSubmit={onSubmit}>
-
-              {/* 1. Presets */}
-              <section>
-                <div className="mb-2.5 flex items-center justify-between">
-                  <SectionLabel step="1">Presets salvos</SectionLabel>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      title="Exportar presets como JSON"
-                      onClick={handleExportPresets}
-                      disabled={userPresets.length === 0}
-                      className="rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-1 text-[11px] text-slate-400 transition hover:border-sky-600 hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      Exportar JSON
-                    </button>
-                    <button
-                      type="button"
-                      title="Importar presets de JSON"
-                      onClick={() => importPresetRef.current?.click()}
-                      className="rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-1 text-[11px] text-slate-400 transition hover:border-sky-600 hover:text-sky-300"
-                    >
-                      Importar JSON
-                    </button>
-                    <input
-                      ref={importPresetRef}
-                      type="file"
-                      accept=".json"
-                      onChange={handleImportPresets}
-                      className="sr-only"
-                    />
-                  </div>
-                </div>
-
-                {/* Dropdown de seleção */}
-                <div className="flex gap-2">
-                  <Select
-                    value={selectedPresetId}
-                    onChange={(e) => {
-                      setSelectedPresetId(e.target.value);
-                      setPresetMode("idle");
-                    }}
-                  >
-                    <option value="">
-                      {userPresets.length === 0 ? "Nenhum preset salvo ainda" : "Selecione um preset..."}
-                    </option>
-                    {userPresets.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </Select>
-
-                  {/* Aplicar */}
-                  <button
-                    type="button"
-                    title="Aplicar preset selecionado"
-                    onClick={handleApplySelectedPreset}
-                    disabled={!selectedPresetId}
-                    className="shrink-0 rounded-xl border border-sky-700/50 bg-sky-500/10 px-3 py-2 text-xs font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Aplicar
-                  </button>
-
-                  {/* Editar */}
-                  <button
-                    type="button"
-                    title="Editar preset selecionado"
-                    onClick={() => {
-                      if (!selectedPresetId) return;
-                      const p = userPresets.find((x) => x.id === selectedPresetId);
-                      if (!p) return;
-                      setPresetName(p.name);
-                      setPresetMode("edit");
-                    }}
-                    disabled={!selectedPresetId}
-                    className="shrink-0 rounded-xl border border-slate-700 bg-slate-800/60 px-2.5 py-2 text-slate-400 transition hover:border-amber-500/50 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <Pencil size={14} />
-                  </button>
-
-                  {/* Excluir */}
-                  <button
-                    type="button"
-                    title="Excluir preset selecionado"
-                    onClick={handleDeletePreset}
-                    disabled={!selectedPresetId}
-                    className="shrink-0 rounded-xl border border-slate-700 bg-slate-800/60 px-2.5 py-2 text-slate-400 transition hover:border-rose-500/50 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-
-                {/* Painel de criação/edição */}
-                {presetMode !== "idle" ? (
-                  <div className="mt-3 flex gap-2 rounded-xl border border-sky-700/30 bg-sky-950/20 p-3">
-                    <Input
-                      placeholder={presetMode === "new" ? "Nome do novo preset..." : "Novo nome..."}
-                      value={presetName}
-                      onChange={(e) => setPresetName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") { e.preventDefault(); handleSavePreset(); }
-                        if (e.key === "Escape") { setPresetMode("idle"); setPresetName(""); }
-                      }}
-                    />
-                    <Button type="button" onClick={handleSavePreset} disabled={!presetName.trim()} className="shrink-0">
-                      {presetMode === "new" ? "Salvar" : "Atualizar"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => { setPresetMode("idle"); setPresetName(""); }}
-                      className="shrink-0"
-                    >
-                      Cancelar
-                    </Button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => { setPresetMode("new"); setPresetName(""); }}
-                    className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-700 py-2 text-xs text-slate-500 transition hover:border-sky-600/50 hover:text-sky-400"
-                  >
-                    <BookmarkPlus size={13} />
-                    Salvar configuracao atual como preset
-                  </button>
-                )}
-
-                {/* Botão de atalho de datas */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const today = formatDateInput(new Date());
-                    setValue("imageDate", today, { shouldValidate: true });
-                    setStatusMessage("Data atualizada para hoje.");
-                  }}
-                  className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/50 py-2 text-xs text-slate-400 transition hover:border-sky-600/50 hover:text-sky-300"
-                >
-                  <CalendarDays size={12} />
-                  Atualizar datas para hoje
-                </button>
-              </section>
-
-              {/* 2. Upload zone */}
-              <section>
-                <SectionLabel step="2">Imagem de evidencia</SectionLabel>
+          <CardContent className="p-5 sm:p-6">
+            <form
+              id="evidence-form"
+              className="space-y-5"
+              onSubmit={onSubmit}
+            >
+              {/* Imagem */}
+              <Section title="Imagem" description="PNG, JPG ou JPEG · max 20 MB">
                 <label
                   htmlFor="file"
                   onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -565,17 +452,16 @@ export function EvidenceGenerator() {
                     if (file) void handleFileDrop(file);
                   }}
                   className={[
-                    "flex cursor-pointer flex-col items-center justify-center gap-2.5 rounded-2xl border-2 border-dashed p-6 text-center transition-all",
+                    "flex cursor-pointer items-center gap-3 rounded-xl border border-dashed px-4 py-3 transition-all",
                     isDragging
                       ? "border-sky-400 bg-sky-950/30"
                       : fileName
-                      ? "border-emerald-500/40 bg-emerald-950/20"
+                      ? "border-emerald-500/40 bg-emerald-950/15"
                       : "border-slate-700 bg-slate-950/40 hover:border-slate-600 hover:bg-slate-900/60",
                   ].join(" ")}
-                  style={{ padding: "0.75rem 1rem" }}
                 >
                   {fileName ? (
-                    <div className="flex w-full items-center gap-3">
+                    <>
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/30">
                         <ImageIcon size={16} className="text-emerald-400" />
                       </div>
@@ -585,20 +471,20 @@ export function EvidenceGenerator() {
                           <p className="text-[11px] text-slate-400">Data detectada: {detectedDate}</p>
                         )}
                       </div>
-                      <span className="shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-400">
+                      <span className="shrink-0 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-400">
                         Trocar
                       </span>
-                    </div>
+                    </>
                   ) : (
-                    <div className="flex w-full items-center gap-3">
+                    <>
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800 ring-1 ring-slate-700">
                         <Upload size={16} className="text-slate-500" />
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs font-medium text-slate-300">Clique ou arraste para upload</p>
-                        <p className="text-[11px] text-slate-500">PNG, JPG ou JPEG · max 20 MB</p>
+                        <p className="text-[11px] text-slate-500">A data EXIF sera detectada automaticamente</p>
                       </div>
-                    </div>
+                    </>
                   )}
                   <input
                     id="file"
@@ -608,238 +494,185 @@ export function EvidenceGenerator() {
                     className="sr-only"
                   />
                 </label>
-              </section>
+              </Section>
 
-              {/* 3. Dados da evidência */}
-              <section>
-                <SectionLabel step="3">Dados da evidencia</SectionLabel>
-                <div className="space-y-2.5">
-                  <FieldGroup>
-                    <F label="Empresa">
-                      <Input id="sourceCompany" {...register("sourceCompany", { required: true })} />
-                    </F>
-                    <F label="CNPJ">
-                      <Input id="sourceCnpj" placeholder="00.000.000/0001-00" {...register("sourceCnpj")} />
-                    </F>
-                    <F label="Empresa Auditora" full>
-                      <Input id="targetCompany" {...register("targetCompany", { required: true })} />
-                      {errors.targetCompany && (
-                        <p className="mt-1 text-xs text-rose-400">Campo obrigatorio.</p>
-                      )}
-                    </F>
-                  </FieldGroup>
-                  <F label="Titulo da evidencia" full>
-                    <Input id="evidenceTitle" {...register("evidenceTitle", { required: true })} />
-                    {errors.evidenceTitle && (
-                      <p className="mt-1 text-xs text-rose-400">Campo obrigatorio.</p>
+              {/* Essencial */}
+              <Section title="Dados da evidencia">
+                <FieldGrid>
+                  <F label="Empresa auditora" full>
+                    <Input id="targetCompany" {...register("targetCompany", { required: true })} />
+                    {errors.targetCompany && (
+                      <p className="text-[11px] text-rose-400">Campo obrigatorio.</p>
                     )}
                   </F>
-                  <FieldGroup>
-                    <F label="Numero de controle">
-                      <Input id="evidenceNumber" placeholder="14.1" {...register("evidenceNumber", { required: true })} />
-                    </F>
-                    <F label="Data da imagem">
-                      <Input id="imageDate" type="date" {...register("imageDate", { required: true })} />
-                    </F>
-                    <F label="Responsavel">
-                      <Input id="responsibleName" {...register("responsibleName")} />
-                    </F>
-                    <F label="Area / Departamento">
-                      <Input id="department" {...register("department")} />
-                    </F>
-                  </FieldGroup>
-                </div>
-              </section>
+                  <F label="Titulo da evidencia" full>
+                    <Input id="evidenceTitle" placeholder="Titulo que aparece no card" {...register("evidenceTitle", { required: true })} />
+                    {errors.evidenceTitle && (
+                      <p className="text-[11px] text-rose-400">Campo obrigatorio.</p>
+                    )}
+                  </F>
+                  <F label="Numero de controle">
+                    <Input id="evidenceNumber" placeholder="14.1" {...register("evidenceNumber", { required: true })} />
+                  </F>
+                  <F label="Data da imagem">
+                    <Input id="imageDate" type="date" {...register("imageDate", { required: true })} />
+                  </F>
+                </FieldGrid>
+              </Section>
 
-              {/* 4. Visual do quadro */}
-              <section>
-                <SectionLabel step="4">Visual do quadro informativo</SectionLabel>
-                <div className="space-y-3">
-                  <div>
-                    <Label className="mb-2 flex items-center gap-1.5 text-slate-300">
-                      <MoveDiagonal2 size={13} /> Posicao
-                    </Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {positionOptions.map((item) => {
-                        const isActive = currentValues.overlayPosition === item.value;
+              {/* Mais detalhes (colapsavel) */}
+              <Section title="Mais detalhes" description="Emissor, responsavel e sigla" collapsible defaultOpen={false}>
+                <FieldGrid>
+                  <F label="Empresa emissora">
+                    <Input id="sourceCompany" {...register("sourceCompany", { required: true })} />
+                  </F>
+                  <F label="CNPJ">
+                    <Input id="sourceCnpj" placeholder="00.000.000/0001-00" {...register("sourceCnpj")} />
+                  </F>
+                  <F label="Responsavel">
+                    <Input id="responsibleName" {...register("responsibleName")} />
+                  </F>
+                  <F label="Area / Departamento">
+                    <Input id="department" {...register("department")} />
+                  </F>
+                  <F label="Sigla do ID" hint="vazio = automatico" full>
+                    <Input id="evidenceAcronym" placeholder="Ex: BRA" maxLength={6} {...register("evidenceAcronym")} />
+                  </F>
+                </FieldGrid>
+              </Section>
+
+              {/* Aparencia (colapsavel) */}
+              <Section title="Aparencia do quadro" description="Posicao, fundo, logo e marca d'agua" collapsible defaultOpen={false}>
+                <F label="Posicao do quadro" full>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {positionOptions.map((item) => {
+                      const isActive = currentValues.overlayPosition === item.value;
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          title={item.label}
+                          onClick={() =>
+                            setValue("overlayPosition", item.value, { shouldValidate: true })
+                          }
+                          className={[
+                            "rounded-lg border px-2 py-2 text-[11px] font-medium transition",
+                            isActive
+                              ? "border-sky-500 bg-sky-500/10 text-sky-300"
+                              : "border-slate-700 text-slate-400 hover:border-slate-600 hover:bg-slate-800",
+                          ].join(" ")}
+                        >
+                          {item.label.replace("Superior ", "Sup. ").replace("Inferior ", "Inf. ")}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </F>
+
+                <FieldGrid>
+                  <F label="Fundo do quadro">
+                    <Select id="overlayBackgroundStyle" {...register("overlayBackgroundStyle")}>
+                      <option value="translucent">Semitransparente</option>
+                      <option value="solid">Solido</option>
+                    </Select>
+                  </F>
+                  <F label="Logo Slice">
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {(["white", "dark"] as const).map((variant) => {
+                        const isActive = (currentValues.logoVariant ?? "white") === variant;
                         return (
                           <button
-                            key={item.value}
+                            key={variant}
                             type="button"
-                            onClick={() =>
-                              setValue("overlayPosition", item.value, { shouldValidate: true })
-                            }
+                            onClick={() => setValue("logoVariant", variant, { shouldValidate: true })}
                             className={[
-                              "rounded-xl border py-2 text-center text-xs font-medium transition",
+                              "h-9 rounded-lg border text-[11px] font-medium transition",
                               isActive
-                                ? "border-sky-500 bg-sky-500/10 text-sky-300 shadow-sm shadow-sky-500/10"
+                                ? "border-sky-500 bg-sky-500/10 text-sky-300"
                                 : "border-slate-700 text-slate-400 hover:border-slate-600 hover:bg-slate-800",
                             ].join(" ")}
                           >
-                            {item.label}
+                            {variant === "white" ? "Branco" : "Escuro"}
                           </button>
                         );
                       })}
                     </div>
-                  </div>
-                  <FieldGroup>
-                    <F label="Fundo do quadro">
-                      <Select id="overlayBackgroundStyle" {...register("overlayBackgroundStyle")}>
-                        <option value="translucent">Semitransparente</option>
-                        <option value="solid">Solido</option>
-                      </Select>
-                    </F>
-                    <div>
-                      <Label className="mb-2 flex items-center gap-1.5 text-slate-300">
-                        <Stamp size={13} /> Marca d&apos;agua
-                      </Label>
-                      <div
-                        className={[
-                          "flex w-full cursor-pointer select-none items-center justify-between rounded-xl border px-3 py-2 text-xs transition",
-                          currentValues.watermarkEnabled
-                            ? "border-sky-500/50 bg-sky-500/10 text-sky-300"
-                            : "border-slate-700 text-slate-400 hover:bg-slate-800",
-                        ].join(" ")}
-                      >
-                        <span
-                          onClick={() =>
-                            setValue("watermarkEnabled", !currentValues.watermarkEnabled, {
-                              shouldValidate: true,
-                            })
-                          }
-                          className="flex-1"
-                        >
-                          {currentValues.watermarkEnabled ? "Ativada" : "Desativada"}
-                        </span>
-                        <Switch
-                          checked={currentValues.watermarkEnabled}
-                          onCheckedChange={(next) =>
-                            setValue("watermarkEnabled", next, { shouldValidate: true })
-                          }
+                  </F>
+                </FieldGrid>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Stamp size={14} className="text-slate-500" />
+                      <div>
+                        <p className="text-[12px] font-medium text-slate-200">Marca d&apos;agua</p>
+                        <p className="text-[11px] text-slate-500">Sobreposta a imagem para uso restrito</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={currentValues.watermarkEnabled}
+                        onCheckedChange={(next) =>
+                          setValue("watermarkEnabled", next, { shouldValidate: true })
+                        }
+                      />
+                    </div>
+                    {currentValues.watermarkEnabled && (
+                      <div className="mt-3">
+                        <Input
+                          id="watermarkText"
+                          placeholder="Texto da marca d'agua"
+                          {...register("watermarkText")}
                         />
                       </div>
-                    </div>
-                  </FieldGroup>
-                  {currentValues.watermarkEnabled && (
-                    <F label="Texto da marca d'agua" full>
-                      <Input id="watermarkText" {...register("watermarkText")} />
-                    </F>
-                  )}
-                </div>
-              </section>
-
-              {/* 5. Historico */}
-              <section>
-                <SectionLabel step="5">Historico local</SectionLabel>
-                <div className="flex gap-2">
-                  <Select
-                    id="history"
-                    value={selectedHistoryId}
-                    onChange={(e) => setSelectedHistoryId(e.target.value)}
-                    disabled={!hasHistory}
-                  >
-                    <option value="">
-                      {hasHistory ? "Selecione uma configuracao" : "Sem historico ainda"}
-                    </option>
-                    {recentConfigurations.map((cfg) => (
-                      <option key={cfg.id} value={cfg.id}>
-                        {new Date(cfg.createdAt).toLocaleString("pt-BR")} – {cfg.label}
-                      </option>
-                    ))}
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      if (!selectedHistoryId) return;
-                      const loaded = loadConfiguration(selectedHistoryId);
-                      if (loaded) reset(loaded);
-                    }}
-                    disabled={!selectedHistoryId}
-                  >
-                    <History size={15} />
-                  </Button>
-                </div>
-              </section>
-
-              {/* Submit */}
-              <div className="space-y-2.5 pt-1">
-                <Button
-                  type="submit"
-                  className="w-full gap-2 text-sm font-semibold"
-                  disabled={isProcessing}
-                >
-                  <Download size={16} />
-                  {isProcessing ? "Processando..." : "Gerar e baixar evidencia"}
-                </Button>
-                <p className="text-center text-[11px] text-slate-500">{generatedName}</p>
-                {statusMessage && (
-                  <p
-                    className={[
-                      "rounded-xl px-3 py-2 text-xs",
-                      statusMessage.startsWith("Falha") ||
-                      statusMessage.startsWith("Formato") ||
-                      statusMessage.startsWith("Arquivo") ||
-                      statusMessage.startsWith("Envie") ||
-                      statusMessage.startsWith("Nao")
-                        ? "bg-rose-950/50 text-rose-300 ring-1 ring-rose-800/40"
-                        : "bg-emerald-950/50 text-emerald-300 ring-1 ring-emerald-800/40",
-                    ].join(" ")}
-                  >
-                    {statusMessage}
-                  </p>
-                )}
-              </div>
+                    )}
+                  </div>
+              </Section>
             </form>
           </CardContent>
         </Card>
 
-        {/* ── Right: Preview card ─────────────────────────────────────────── */}
-        <Card className="flex min-h-0 flex-col overflow-hidden border-slate-700/50 shadow-lg shadow-black/25">
-          <CardHeader className="shrink-0 bg-slate-900/60">
-            <CardTitle className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 ring-1 ring-indigo-500/25">
-                  <Upload size={14} />
-                </span>
-                Pre-visualizacao em tempo real
-              </span>
-              <span className="rounded-lg bg-slate-800/80 px-2.5 py-1 text-[11px] font-medium text-slate-400 ring-1 ring-slate-700/50">
-                Alta resolucao na exportacao
-              </span>
+        {/* ── Bottom: Preview card ────────────────────────────────────────── */}
+        <Card className="order-2 mt-3 flex flex-col overflow-hidden border-slate-800 bg-slate-900/70">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-slate-800 bg-slate-900/80">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <ImageIcon size={15} className="text-indigo-400" />
+              Pre-visualizacao
             </CardTitle>
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-emerald-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Tempo real
+            </span>
           </CardHeader>
 
-          <CardContent className="min-h-0 flex-1 overflow-y-auto">
+          <CardContent className="flex flex-1 flex-col gap-4 p-5 sm:p-6">
             {!previewUrl ? (
-              <div className="flex h-full min-h-[440px] flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-slate-800 bg-gradient-to-b from-slate-900/40 to-slate-950/60">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800/80 ring-1 ring-slate-700">
-                  <Building2 size={28} className="text-slate-500" />
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 p-8">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-800/80 ring-1 ring-slate-700">
+                  <Building2 size={22} className="text-slate-500" />
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-semibold text-slate-300">Aguardando imagem</p>
-                  <p className="mt-1 max-w-xs text-xs text-slate-500">
-                    Faca o upload de uma imagem no painel ao lado para visualizar a evidencia
-                    gerada em tempo real com o quadro informativo aplicado.
+                  <p className="text-sm font-medium text-slate-300">Aguardando imagem</p>
+                  <p className="mt-1 max-w-md text-xs text-slate-500">
+                    Faca o upload no formulario acima para visualizar a evidencia gerada.
                   </p>
                 </div>
                 <label
                   htmlFor="file"
-                  className="cursor-pointer rounded-xl border border-slate-700 bg-slate-800 px-5 py-2.5 text-xs font-medium text-slate-300 transition hover:bg-slate-700"
+                  className="cursor-pointer rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-700"
                 >
                   Selecionar imagem
                 </label>
               </div>
             ) : (
-              <div className="flex h-full flex-col gap-3">
+              <>
                 {/* ── Redact toolbar ──────────────────────────────── */}
-                <div className="flex items-center gap-1.5 rounded-xl border border-slate-700/60 bg-slate-900/60 px-3 py-1.5">
-                  <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Redacao</span>
+                <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/50 px-2.5 py-1.5">
+                  <span className="mr-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Redacao</span>
                   <button
                     type="button"
                     onClick={() => setRedactMode(m => m === "blur" ? null : "blur")}
                     className={[
-                      "flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition",
+                      "flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition",
                       redactMode === "blur"
                         ? "border-sky-500 bg-sky-500/15 text-sky-300"
                         : "border-slate-700 text-slate-400 hover:border-sky-700 hover:text-sky-300",
@@ -851,7 +684,7 @@ export function EvidenceGenerator() {
                     type="button"
                     onClick={() => setRedactMode(m => m === "pixelate" ? null : "pixelate")}
                     className={[
-                      "flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition",
+                      "flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition",
                       redactMode === "pixelate"
                         ? "border-amber-500 bg-amber-500/15 text-amber-300"
                         : "border-slate-700 text-slate-400 hover:border-amber-700 hover:text-amber-300",
@@ -859,90 +692,73 @@ export function EvidenceGenerator() {
                   >
                     <Grid3X3 size={11} /> Pixelar
                   </button>
-                  <div className="ml-auto flex gap-1">
+                  <div className="ml-auto flex items-center gap-1">
                     <button
                       type="button"
-                      title="Desfazer última região"
+                      title="Desfazer ultima regiao"
                       onClick={() => setRedactRegions(r => r.slice(0, -1))}
                       disabled={redactRegions.length === 0}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 text-slate-400 transition hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       <Undo2 size={12} />
                     </button>
                     <button
                       type="button"
-                      title="Limpar todas as regiões"
+                      title="Limpar todas as regioes"
                       onClick={() => { setRedactRegions([]); setRedactMode(null); }}
                       disabled={redactRegions.length === 0}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-rose-600 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-30"
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 text-slate-400 transition hover:border-rose-600 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       <Trash2 size={12} />
                     </button>
                   </div>
                 </div>
-                <div className="group relative flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+
+                <div className="group relative flex flex-1 items-center justify-center overflow-auto rounded-xl border border-slate-800 bg-slate-950/70 p-3">
                   {!redactMode && (
                     <button
                       type="button"
                       onClick={() => { setLbZoom(1); setLbOffset({ x: 0, y: 0 }); setLightboxOpen(true); }}
                       title="Abrir em tela cheia"
-                      className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900/80 text-slate-400 opacity-0 ring-1 ring-slate-700 transition hover:text-white group-hover:opacity-100"
+                      className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900/80 text-slate-400 opacity-100 ring-1 ring-slate-700 transition hover:text-white sm:opacity-0 sm:group-hover:opacity-100"
                     >
                       <Maximize2 size={14} />
                     </button>
                   )}
                   {redactMode && (
-                    <div className="absolute left-3 top-3 z-10 rounded-lg bg-slate-900/90 px-2.5 py-1 text-[11px] font-medium text-slate-300 ring-1 ring-slate-700">
-                      {redactMode === "blur" ? "💧 Arraste para desfocar" : "🔳 Arraste para pixelar"}
+                    <div className="absolute left-3 top-3 z-10 rounded-md bg-slate-900/90 px-2.5 py-1 text-[11px] font-medium text-slate-300 ring-1 ring-slate-700">
+                      {redactMode === "blur" ? "Arraste para desfocar" : "Arraste para pixelar"}
                     </div>
                   )}
-                  <div className="relative inline-block" ref={imgWrapperRef}>
+                  <div className="relative inline-block leading-[0]" ref={imgWrapperRef}>
                     <NextImage
                       src={previewUrl}
                       alt="Preview da evidencia processada"
                       width={sourceImage?.naturalWidth ?? 1400}
                       height={sourceImage?.naturalHeight ?? 900}
                       unoptimized
+                      draggable={false}
                       onClick={() => { if (!redactMode) { setLbZoom(1); setLbOffset({ x: 0, y: 0 }); setLightboxOpen(true); } }}
-                      className={`h-auto max-h-[58vh] w-auto rounded-xl shadow-2xl shadow-black/50 transition ${
+                      className={`block h-auto max-h-[60vh] w-auto select-none rounded-lg shadow-xl shadow-black/40 transition lg:max-h-[68vh] ${
                         redactMode ? "cursor-crosshair" : "cursor-zoom-in hover:brightness-105"
                       }`}
                     />
                     {/* Redact overlay — visible + interactive when in redact mode */}
                     <div
-                      className="absolute inset-0 rounded-xl"
+                      className="absolute inset-0 select-none rounded-lg"
                       style={{
                         cursor: redactMode ? "crosshair" : "default",
                         pointerEvents: redactMode ? "auto" : "none",
                       }}
                       onMouseDown={(e) => {
                         if (!redactMode || !sourceImage) return;
+                        e.preventDefault();
                         const rect = imgWrapperRef.current?.getBoundingClientRect();
                         if (!rect) return;
                         const sx = Math.round(((e.clientX - rect.left) / rect.width) * sourceImage.naturalWidth);
                         const sy = Math.round(((e.clientY - rect.top) / rect.height) * sourceImage.naturalHeight);
                         setDrawing({ sx, sy, ex: sx, ey: sy });
                       }}
-                      onMouseMove={(e) => {
-                        if (!drawing || !sourceImage) return;
-                        const rect = imgWrapperRef.current?.getBoundingClientRect();
-                        if (!rect) return;
-                        const ex = Math.round(((e.clientX - rect.left) / rect.width) * sourceImage.naturalWidth);
-                        const ey = Math.round(((e.clientY - rect.top) / rect.height) * sourceImage.naturalHeight);
-                        setDrawing(d => d ? { ...d, ex, ey } : null);
-                      }}
-                      onMouseUp={() => {
-                        if (!drawing || !redactMode) return;
-                        const x = Math.min(drawing.sx, drawing.ex);
-                        const y = Math.min(drawing.sy, drawing.ey);
-                        const w = Math.abs(drawing.ex - drawing.sx);
-                        const h = Math.abs(drawing.ey - drawing.sy);
-                        if (w > 8 && h > 8) {
-                          setRedactRegions(r => [...r, { x, y, w, h, type: redactMode }]);
-                        }
-                        setDrawing(null);
-                      }}
-                      onMouseLeave={() => setDrawing(null)}
                     >
                       {/* Saved regions */}
                       {sourceImage && redactRegions.map((r, i) => (
@@ -974,24 +790,53 @@ export function EvidenceGenerator() {
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <InfoChip
-                    icon={<User size={11} />}
-                    label="Responsavel"
-                    value={currentValues.responsibleName || "Nao informado"}
-                  />
-                  <InfoChip
-                    icon={<CalendarDays size={11} />}
-                    label="Data da imagem"
-                    value={currentValues.imageDate || "—"}
-                  />
-                  <InfoChip
-                    icon={<ShieldCheck size={11} />}
-                    label="N. controle"
-                    value={currentValues.evidenceNumber || "—"}
-                  />
+
+                {/* Footer: meta info + submit */}
+                <div className="flex flex-col gap-3 border-t border-slate-800 pt-4 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="grid flex-1 grid-cols-3 gap-3 text-[11px]">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500">Responsavel</p>
+                      <p className="mt-0.5 truncate font-medium text-slate-200">{currentValues.responsibleName || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500">Data</p>
+                      <p className="mt-0.5 truncate font-medium text-slate-200">{currentValues.imageDate || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500">N. controle</p>
+                      <p className="mt-0.5 truncate font-medium text-slate-200">{currentValues.evidenceNumber || "—"}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-stretch gap-1.5 sm:items-end">
+                    <Button
+                      type="submit"
+                      form="evidence-form"
+                      className="gap-2 px-5 text-sm font-semibold"
+                      disabled={isProcessing}
+                    >
+                      <Download size={16} />
+                      {isProcessing ? "Processando..." : "Gerar e baixar"}
+                    </Button>
+                    <p className="truncate text-[10px] text-slate-500 sm:max-w-xs">{generatedName}</p>
+                  </div>
                 </div>
-              </div>
+                {statusMessage && (
+                  <p
+                    className={[
+                      "rounded-lg px-3 py-2 text-xs",
+                      statusMessage.startsWith("Falha") ||
+                      statusMessage.startsWith("Formato") ||
+                      statusMessage.startsWith("Arquivo") ||
+                      statusMessage.startsWith("Envie") ||
+                      statusMessage.startsWith("Nao")
+                        ? "bg-rose-950/50 text-rose-300 ring-1 ring-rose-800/40"
+                        : "bg-emerald-950/50 text-emerald-300 ring-1 ring-emerald-800/40",
+                    ].join(" ")}
+                  >
+                    {statusMessage}
+                  </p>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -1077,6 +922,72 @@ export function EvidenceGenerator() {
           <p className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-slate-900/80 px-4 py-1.5 text-xs text-slate-400 ring-1 ring-slate-700 pointer-events-none">
             Scroll para zoom · Arraste para mover · Esc para fechar
           </p>
+        </div>
+      )}
+
+      {/* ── Modal de preset ───────────────────────────────────────────────── */}
+      {presetMode !== "idle" && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm"
+          onClick={() => { setPresetMode("idle"); setPresetName(""); }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 p-5 shadow-2xl shadow-black/50 sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Título */}
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+                <BookmarkPlus size={16} className="text-sky-400" />
+                {presetMode === "new" ? "Salvar preset" : "Renomear preset"}
+              </h2>
+              <button
+                type="button"
+                onClick={() => { setPresetMode("idle"); setPresetName(""); }}
+                className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-800 hover:text-slate-300"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Descrição contextual */}
+            <p className="mb-4 text-xs text-slate-400">
+              {presetMode === "new"
+                ? "Os valores atuais do formulário serão salvos como preset."
+                : `Editando: "${userPresets.find((p) => p.id === selectedPresetId)?.name ?? ""}"`}
+            </p>
+
+            {/* Input nome */}
+            <Input
+              autoFocus
+              placeholder="Nome do preset..."
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); handleSavePreset(); }
+                if (e.key === "Escape") { setPresetMode("idle"); setPresetName(""); }
+              }}
+              className="mb-4"
+            />
+
+            {/* Ações */}
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { setPresetMode("idle"); setPresetName(""); }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSavePreset}
+                disabled={!presetName.trim()}
+              >
+                {presetMode === "new" ? "Salvar preset" : "Atualizar nome"}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

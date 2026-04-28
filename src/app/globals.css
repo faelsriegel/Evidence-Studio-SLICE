@@ -21,9 +21,10 @@ body {
   color: var(--foreground);
   font-family: var(--font-manrope), "Segoe UI", sans-serif;
   background-image:
-    radial-gradient(circle at 20% 20%, rgba(14, 116, 144, 0.22), transparent 35%),
-    radial-gradient(circle at 80% 0%, rgba(14, 165, 233, 0.2), transparent 30%),
-    linear-gradient(180deg, var(--surface-soft), transparent 65%);
+    radial-gradient(ellipse 80% 60% at 20% 0%, rgba(14, 116, 144, 0.18), transparent 70%),
+    radial-gradient(ellipse 70% 50% at 90% 10%, rgba(14, 165, 233, 0.14), transparent 70%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 * {

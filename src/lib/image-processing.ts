@@ -32,7 +32,7 @@ function resolveOverlayCoordinates(
       return { x: right, y: bottom };
   }
 }
-/** Trunca texto com "\u2026" se exceder maxWidth no contexto do canvas. */
+/** Trunca texto com "…" se exceder maxWidth no contexto do canvas. */
 function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
   if (ctx.measureText(text).width <= maxWidth) return text;
   let t = text;
@@ -40,6 +40,41 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number):
     t = t.slice(0, -1);
   }
   return t + "\u2026";
+}
+
+/**
+ * Quebra texto em múltiplas linhas respeitando maxWidth.
+ * Retorna no máximo maxLines linhas; a última é truncada com "…" se necessário.
+ */
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number,
+): string[] {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word;
+    if (ctx.measureText(test).width <= maxWidth) {
+      current = test;
+    } else {
+      if (current) lines.push(current);
+      if (lines.length >= maxLines) break;
+      current = word;
+    }
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+
+  // Se ainda há conteúdo mas atingiu o limite, truncar a última linha
+  if (lines.length === maxLines) {
+    const last = lines[maxLines - 1];
+    lines[maxLines - 1] = fitText(ctx, last, maxWidth);
+  }
+
+  return lines;
 }
 
 export function processEvidenceImage({ image, form, logoImage, redactRegions, evidenceId }: ProcessOptions): HTMLCanvasElement {
@@ -88,29 +123,36 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
 
   /* ── Overlay card ────────────────────────────────────────────────────── */
   const margin     = Math.max(20, Math.round(width * 0.02));
-  const boxWidth   = Math.round(width * 0.52);
-  const lh         = Math.max(17, Math.round(width * 0.0165)); // line height
-  const titleSize  = Math.max(13, Math.round(width * 0.017));
-  const idSize     = Math.max(12, Math.round(width * 0.014));
-  const bodySize   = Math.max(11, Math.round(width * 0.013));
-  const pad        = Math.max(14, Math.round(width * 0.015));
-  const borderW    = Math.max(2, Math.round(width * 0.002));
-  const inset      = borderW + Math.max(3, Math.round(width * 0.003));
+  const boxWidth   = Math.round(width * 0.34);
+  const lh         = Math.max(14, Math.round(width * 0.013)); // line height
+  const titleSize  = Math.max(11, Math.round(width * 0.013));
+  const idSize     = Math.max(10, Math.round(width * 0.011));
+  const bodySize   = Math.max(9,  Math.round(width * 0.010));
+  const pad        = Math.max(10, Math.round(width * 0.012));
+  const borderW    = Math.max(1, Math.round(width * 0.0015));
+  const inset      = borderW + Math.max(2, Math.round(width * 0.002));
 
   const fields: [string, string][] = [
     ["EMPRESA EMISSORA",    form.sourceCompany],
     ["CNPJ",               form.sourceCnpj || "-"],
     ["EMPRESA REQUISITANTE", form.targetCompany],
-    ["TÍTULO DA EVIDÊNCIA", form.evidenceTitle],
-    ["NÚMERO DE CONTROLE", form.evidenceNumber],
+    ...(form.evidenceTitle?.trim() ? [["TÍTULO EXTERNO", form.evidenceTitle] as [string, string]] : []),
+    ["NÚMERO DE CONTROLE EXTERNO", form.evidenceNumber],
     ["DATA DA CAPTURA",    formatDateDisplay(form.imageDate)],
     ["RESPONSÁVEL",        form.responsibleName || "-"],
     ...(form.department ? [["ÁREA / DEPARTAMENTO", form.department] as [string, string]] : []),
   ];
 
-  // Heights
+  // Heights — pré-calcula linhas extras do TÍTULO EXTERNO (se existir)
+  const availW = boxWidth - pad * 2;
+  ctx.font = `400 ${bodySize}px system-ui, -apple-system, sans-serif`;
+  const hasTitulo = !!form.evidenceTitle?.trim();
+  const tituloValue = hasTitulo ? `TÍTULO EXTERNO: ${form.evidenceTitle.toUpperCase()}` : "";
+  const tituloLines = hasTitulo ? wrapText(ctx, tituloValue, availW, 3) : [];
+  const extraLines  = Math.max(0, tituloLines.length - 1);
+
   const headerHeight = pad + lh * 1.35 + lh * 1.15 + pad * 0.7;
-  const bodyHeight   = lh * 1.2 * fields.length + pad;
+  const bodyHeight   = lh * 1.2 * (fields.length + extraLines) + pad;
   const boxHeight    = Math.round(headerHeight + 1 + bodyHeight);
 
   const { x, y } = resolveOverlayCoordinates(
@@ -125,15 +167,15 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
   const isSolid = form.overlayBackgroundStyle === "solid";
 
   /* Background body */
-  ctx.fillStyle = isSolid ? "rgba(8, 18, 38, 0.97)" : "rgba(8, 18, 38, 0.84)";
+  ctx.fillStyle = isSolid ? "rgba(8, 18, 38, 0.52)" : "rgba(8, 18, 38, 0.32)";
   ctx.fillRect(x, y, boxWidth, boxHeight);
 
   /* Header tinted background */
-  ctx.fillStyle = isSolid ? "rgba(18, 40, 78, 0.98)" : "rgba(18, 40, 78, 0.88)";
+  ctx.fillStyle = isSolid ? "rgba(18, 40, 78, 0.58)" : "rgba(18, 40, 78, 0.38)";
   ctx.fillRect(x, y, boxWidth, Math.round(headerHeight));
 
   /* Outer border */
-  ctx.strokeStyle = "rgba(96, 180, 255, 0.90)";
+  ctx.strokeStyle = "rgba(96, 180, 255, 0.60)";
   ctx.lineWidth = borderW;
   ctx.strokeRect(
     x + borderW / 2,
@@ -143,13 +185,13 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
   );
 
   /* Inner border (inset accent) */
-  ctx.strokeStyle = "rgba(96, 180, 255, 0.28)";
+  ctx.strokeStyle = "rgba(96, 180, 255, 0.18)";
   ctx.lineWidth = 1;
   ctx.strokeRect(x + inset, y + inset, boxWidth - inset * 2, boxHeight - inset * 2);
 
   /* Separator line at header/body junction */
   const sepY = y + Math.round(headerHeight);
-  ctx.strokeStyle = "rgba(96, 180, 255, 0.80)";
+  ctx.strokeStyle = "rgba(96, 180, 255, 0.55)";
   ctx.lineWidth = borderW;
   ctx.beginPath();
   ctx.moveTo(x, sepY);
@@ -157,31 +199,39 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
   ctx.stroke();
 
   /* ── Header text ── */
-  const availW = boxWidth - pad * 2;
-
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
 
-  ctx.fillStyle = "#e8f4ff";
+  ctx.fillStyle = "rgba(232, 244, 255, 0.85)";
   ctx.font = `700 ${titleSize}px system-ui, -apple-system, sans-serif`;
   const titleText = fitText(ctx, "EVIDÊNCIA DE CONTROLE DE SEGURANÇA", availW);
   ctx.fillText(titleText, x + boxWidth / 2, y + pad + lh * 1.1);
 
   if (evidenceId) {
-    ctx.fillStyle = "#7dd3fc";
+    ctx.fillStyle = "rgba(125, 211, 252, 0.80)";
     ctx.font = `600 ${idSize}px system-ui, -apple-system, sans-serif`;
     ctx.fillText(evidenceId, x + boxWidth / 2, y + pad + lh * 1.1 + lh * 1.2);
   }
 
   /* ── Body fields ── */
   ctx.textAlign = "left";
-  ctx.fillStyle = "#dbeafe";
-  ctx.font = `500 ${bodySize}px system-ui, -apple-system, sans-serif`;
+  ctx.fillStyle = "rgba(219, 234, 254, 0.78)";
+  ctx.font = `400 ${bodySize}px system-ui, -apple-system, sans-serif`;
 
   const bodyStartY = sepY + lh * 1.1;
-  fields.forEach(([label, value], idx) => {
-    const line = `${label}: ${value.toUpperCase()}`;
-    ctx.fillText(fitText(ctx, line, availW), x + pad, bodyStartY + lh * 1.2 * idx);
+  let yOff = 0;
+  fields.forEach(([label, value]) => {
+    if (label === "TÍTULO EXTERNO") {
+      tituloLines.forEach((line, li) => {
+        // Na primeira sub-linha já temos o label incluído; nas demais, apenas continuação
+        ctx.fillText(li === 0 ? line : `  ${line}`, x + pad, bodyStartY + lh * 1.2 * yOff);
+        yOff++;
+      });
+    } else {
+      const line = `${label}: ${value.toUpperCase()}`;
+      ctx.fillText(fitText(ctx, line, availW), x + pad, bodyStartY + lh * 1.2 * yOff);
+      yOff++;
+    }
   });
 
   /* ── Watermark text ────────────────────────────────────────────────── */
@@ -191,7 +241,7 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
     ctx.translate(width / 2, height / 2);
     ctx.rotate((-20 * Math.PI) / 180);
     ctx.textAlign = "center";
-    ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.50)";
     ctx.font = `700 ${Math.max(34, Math.round(width * 0.055))}px system-ui, sans-serif`;
     ctx.fillText(wmText, 0, 0);
     ctx.restore();
@@ -203,7 +253,8 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
     const logoW = Math.round(width * 0.14);
     const logoH = Math.round(logoW * (logoImage.naturalHeight / logoImage.naturalWidth));
     ctx.save();
-    ctx.globalAlpha = 0.18;
+    ctx.globalAlpha = 0.40;
+    if (form.logoVariant === "dark") ctx.filter = "invert(1)";
     ctx.drawImage(logoImage, width - logoW - logoMargin, height - logoH - logoMargin, logoW, logoH);
     ctx.restore();
   }

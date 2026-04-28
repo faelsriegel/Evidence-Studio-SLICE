@@ -6,10 +6,13 @@ export type OverlayPosition =
 
 export type OverlayBackgroundStyle = "solid" | "translucent";
 
+export type LogoVariant = "white" | "dark";
+
 export interface EvidenceFormData {
   sourceCompany: string;
   sourceCnpj?: string;
   targetCompany: string;
+  evidenceAcronym?: string;
   evidenceTitle: string;
   evidenceNumber: string;
   imageDate: string;
@@ -17,6 +20,7 @@ export interface EvidenceFormData {
   department?: string;
   watermarkEnabled: boolean;
   watermarkText: string;
+  logoVariant: LogoVariant;
   overlayPosition: OverlayPosition;
   overlayBackgroundStyle: OverlayBackgroundStyle;
 }

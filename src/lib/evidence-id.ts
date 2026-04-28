@@ -1,13 +1,16 @@
 /**
  * Lógica de geração do ID de evidência.
  *
- * Formato: {SIGLA}-{ANO}-{CTRL}-{SEQ:03d}
+ * Formato: {SIGLA}-{MAJOR:03d}-{MINOR:03d}-{SEQ:03d}-{ANO}
  *   SIGLA  = iniciais das palavras com >2 chars do nome da empresa auditora (max 4 letras)
- *   ANO    = ano de 4 dígitos extraído de imageDate (YYYY-MM-DD)
- *   CTRL   = evidenceNumber com apenas alfanuméricos (pontos/barras removidos)
+ *            ou valor manual do campo evidenceAcronym
+ *   MAJOR  = parte inteira do número de controle, zero-padded 3 dígitos (14.1 → 014)
+ *   MINOR  = parte decimal do número de controle, zero-padded 3 dígitos (14.1 → 001)
+ *            se não tiver parte decimal, usa 000
  *   SEQ    = contador crescente para múltiplas evidências da mesma requisição
+ *   ANO    = ano de 4 dígitos extraído de imageDate (YYYY-MM-DD)
  *
- * Exemplo: "EMPRESA AUDITORA", "14.1", "2026-04-26", seq=1 → "EA-2026-141-001"
+ * Exemplo: "BRASIL AUDITORES", "14.1", "2026-04-26", seq=1 → "BRA-014-001-001-2026"
  */
 
 /**
@@ -46,16 +49,30 @@ export function companyAcronym(company: string): string {
 
 /**
  * Monta o ID da evidência a partir dos componentes.
+ * @param acronym - sigla manual (override); se vazio usa iniciais da empresa
  */
 export function generateEvidenceId(
   targetCompany: string,
   evidenceNumber: string,
   imageDate: string,
   seq: number,
+  acronym?: string,
 ): string {
-  const prefix = companyAcronym(targetCompany);
+  const prefix = acronym?.trim().toUpperCase() || companyAcronym(targetCompany);
   const year = imageDate.split("-")[0] || String(new Date().getFullYear());
-  const ctrl = evidenceNumber.replace(/[^A-Za-z0-9]/g, "").toUpperCase() || "000";
+
+  // Separa parte inteira e decimal do número de controle (ex: "14.1" → major=14, minor=1)
+  const dotIdx = evidenceNumber.indexOf(".");
+  const rawMajor = dotIdx >= 0 ? evidenceNumber.slice(0, dotIdx) : evidenceNumber;
+  const rawMinor = dotIdx >= 0 ? evidenceNumber.slice(dotIdx + 1) : "";
+
+  // Mantém apenas dígitos para o padding; se não numérico, usa como string
+  const majorNum = parseInt(rawMajor.replace(/\D/g, ""), 10);
+  const minorNum = rawMinor ? parseInt(rawMinor.replace(/\D/g, ""), 10) : NaN;
+
+  const major = isNaN(majorNum) ? rawMajor.toUpperCase() : String(majorNum).padStart(3, "0");
+  const minor = isNaN(minorNum) ? "000" : String(minorNum).padStart(3, "0");
   const seqStr = String(seq).padStart(3, "0");
-  return `${prefix}-${year}-${ctrl}-${seqStr}`;
+
+  return `${prefix}-${major}-${minor}-${seqStr}-${year}`;
 }
