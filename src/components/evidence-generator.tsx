@@ -102,9 +102,9 @@ const positionOptions: { label: string; value: OverlayPosition }[] = [
 
 function buildDownloadName(form: EvidenceFormData): string {
   const number = sanitizeForFileName(form.evidenceNumber || "SEM_NUMERO");
-  const company = sanitizeForFileName(form.targetCompany || "SEM_EMPRESA");
+  const auditor = sanitizeForFileName(form.targetCompany || "SEM_AUDITORA");
   const date = (form.imageDate || formatDateInput(new Date())).replace(/-/g, "");
-  return `EVIDENCIA_${number}_${company}_${date}.png`;
+  return `EVIDENCIA_${number}_${auditor}_${date}.png`;
 }
 
 function loadImage(file: File): Promise<HTMLImageElement> {
@@ -134,6 +134,8 @@ export function EvidenceGenerator() {
     savePreset,
     updatePreset,
     deletePreset,
+    nextEvidenceId,
+    peekEvidenceId,
   } = useEvidenceStore();
 
   const [fileName, setFileName] = useState<string>("");
@@ -152,6 +154,10 @@ export function EvidenceGenerator() {
 
   /* lightbox */
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lbZoom, setLbZoom] = useState(1);
+  const [lbOffset, setLbOffset] = useState({ x: 0, y: 0 });
+  const [lbDragging, setLbDragging] = useState(false);
+  const lbDrag = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
 
   /* redact tool */
   const imgWrapperRef = useRef<HTMLDivElement>(null);
@@ -212,12 +218,13 @@ export function EvidenceGenerator() {
     }
 
     try {
-      const canvas = processEvidenceImage({ image: sourceImage, form: currentValues, logoImage, redactRegions });
+      const previewId = peekEvidenceId(currentValues.targetCompany, currentValues.evidenceNumber, currentValues.imageDate);
+      const canvas = processEvidenceImage({ image: sourceImage, form: currentValues, logoImage, redactRegions, evidenceId: previewId });
       return canvas.toDataURL("image/png", 1);
     } catch {
       return "";
     }
-  }, [sourceImage, currentValues, logoImage, redactRegions]);
+  }, [sourceImage, currentValues, logoImage, redactRegions, peekEvidenceId]);
 
   const hasHistory = recentConfigurations.length > 0;
   const generatedName = useMemo(() => buildDownloadName(currentValues), [currentValues]);
@@ -296,7 +303,7 @@ export function EvidenceGenerator() {
   /* fechar lightbox com Escape */
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setLightboxOpen(false);
+      if (e.key === "Escape") { setLightboxOpen(false); setLbZoom(1); setLbOffset({ x: 0, y: 0 }); }
     }
     if (lightboxOpen) window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -352,7 +359,8 @@ export function EvidenceGenerator() {
     setStatusMessage("");
 
     try {
-      const canvas = processEvidenceImage({ image: sourceImage, form: formData, logoImage, redactRegions });
+      const evId = nextEvidenceId(formData.targetCompany, formData.evidenceNumber, formData.imageDate);
+      const canvas = processEvidenceImage({ image: sourceImage, form: formData, logoImage, redactRegions, evidenceId: evId });
       const finalName = buildDownloadName(formData);
       downloadCanvas(canvas, finalName);
       saveConfiguration(formData);
@@ -610,10 +618,10 @@ export function EvidenceGenerator() {
                     <F label="Empresa">
                       <Input id="sourceCompany" {...register("sourceCompany", { required: true })} />
                     </F>
-                    <F label="CNPJ Slice">
+                    <F label="CNPJ">
                       <Input id="sourceCnpj" placeholder="00.000.000/0001-00" {...register("sourceCnpj")} />
                     </F>
-                    <F label="Empresa destinataria" full>
+                    <F label="Empresa Auditora" full>
                       <Input id="targetCompany" {...register("targetCompany", { required: true })} />
                       {errors.targetCompany && (
                         <p className="mt-1 text-xs text-rose-400">Campo obrigatorio.</p>
@@ -876,7 +884,7 @@ export function EvidenceGenerator() {
                   {!redactMode && (
                     <button
                       type="button"
-                      onClick={() => setLightboxOpen(true)}
+                      onClick={() => { setLbZoom(1); setLbOffset({ x: 0, y: 0 }); setLightboxOpen(true); }}
                       title="Abrir em tela cheia"
                       className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900/80 text-slate-400 opacity-0 ring-1 ring-slate-700 transition hover:text-white group-hover:opacity-100"
                     >
@@ -895,7 +903,7 @@ export function EvidenceGenerator() {
                       width={sourceImage?.naturalWidth ?? 1400}
                       height={sourceImage?.naturalHeight ?? 900}
                       unoptimized
-                      onClick={() => !redactMode && setLightboxOpen(true)}
+                      onClick={() => { if (!redactMode) { setLbZoom(1); setLbOffset({ x: 0, y: 0 }); setLightboxOpen(true); } }}
                       className={`h-auto max-h-[58vh] w-auto rounded-xl shadow-2xl shadow-black/50 transition ${
                         redactMode ? "cursor-crosshair" : "cursor-zoom-in hover:brightness-105"
                       }`}
@@ -992,31 +1000,82 @@ export function EvidenceGenerator() {
       {/* ── Lightbox ──────────────────────────────────────────────────────── */}
       {lightboxOpen && previewUrl && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
-          onClick={() => setLightboxOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/92 backdrop-blur-sm"
+          onClick={() => { setLightboxOpen(false); setLbZoom(1); setLbOffset({ x: 0, y: 0 }); }}
+          onWheel={(e) => {
+            e.preventDefault();
+            setLbZoom(z => Math.min(8, Math.max(0.5, z - e.deltaY * 0.001)));
+          }}
         >
-          <button
-            type="button"
-            onClick={() => setLightboxOpen(false)}
-            className="absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-slate-300 ring-1 ring-slate-700 transition hover:bg-slate-700 hover:text-white"
-          >
-            <X size={18} />
-          </button>
-          <div
-            className="relative max-h-[95dvh] max-w-[95dvw] overflow-auto rounded-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <NextImage
-              src={previewUrl}
-              alt="Evidencia em tela cheia"
-              width={sourceImage?.naturalWidth ?? 1400}
-              height={sourceImage?.naturalHeight ?? 900}
-              unoptimized
-              className="block h-auto max-h-[95dvh] w-auto max-w-[95dvw] rounded-2xl shadow-2xl"
-            />
+          {/* Controles */}
+          <div className="absolute right-5 top-5 z-10 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => { setLbZoom(z => Math.min(8, z + 0.5)); }}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-800 text-slate-300 ring-1 ring-slate-700 transition hover:bg-slate-700 hover:text-white text-lg font-bold"
+            >+</button>
+            <button
+              type="button"
+              onClick={() => { setLbZoom(1); setLbOffset({ x: 0, y: 0 }); }}
+              className="rounded-full bg-slate-800 px-3 py-2 text-xs text-slate-300 ring-1 ring-slate-700 transition hover:bg-slate-700 hover:text-white"
+            >{Math.round(lbZoom * 100)}%</button>
+            <button
+              type="button"
+              onClick={() => { setLbZoom(z => Math.max(0.5, z - 0.5)); }}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-800 text-slate-300 ring-1 ring-slate-700 transition hover:bg-slate-700 hover:text-white text-lg font-bold"
+            >−</button>
+            <button
+              type="button"
+              onClick={() => { setLightboxOpen(false); setLbZoom(1); setLbOffset({ x: 0, y: 0 }); }}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-800 text-slate-300 ring-1 ring-slate-700 transition hover:bg-slate-700 hover:text-white"
+            >
+              <X size={16} />
+            </button>
           </div>
-          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-slate-900/80 px-4 py-1.5 text-xs text-slate-400 ring-1 ring-slate-700">
-            Clique fora ou pressione Esc para fechar
+
+          {/* Imagem com zoom + pan */}
+          <div
+            className="overflow-hidden"
+            style={{ width: "100dvw", height: "100dvh" }}
+            onClick={e => e.stopPropagation()}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              lbDrag.current = { startX: e.clientX, startY: e.clientY, ox: lbOffset.x, oy: lbOffset.y };
+              setLbDragging(true);
+            }}
+            onMouseMove={(e) => {
+              if (!lbDrag.current) return;
+              setLbOffset({
+                x: lbDrag.current.ox + (e.clientX - lbDrag.current.startX),
+                y: lbDrag.current.oy + (e.clientY - lbDrag.current.startY),
+              });
+            }}
+            onMouseUp={() => { lbDrag.current = null; setLbDragging(false); }}
+            onMouseLeave={() => { lbDrag.current = null; setLbDragging(false); }}
+          >
+            <div
+              className="flex h-full w-full items-center justify-center"
+              style={{
+                transform: `translate(${lbOffset.x}px, ${lbOffset.y}px) scale(${lbZoom})`,
+                transformOrigin: "center center",
+                cursor: lbZoom > 1 ? (lbDragging ? "grabbing" : "grab") : "default",
+                transition: lbDragging ? "none" : "transform 0.1s ease",
+              }}
+            >
+              <NextImage
+                src={previewUrl}
+                alt="Evidencia em tela cheia"
+                width={sourceImage?.naturalWidth ?? 1400}
+                height={sourceImage?.naturalHeight ?? 900}
+                unoptimized
+                draggable={false}
+                className="block h-auto max-h-[90dvh] w-auto max-w-[90dvw] rounded-xl shadow-2xl select-none"
+              />
+            </div>
+          </div>
+
+          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-slate-900/80 px-4 py-1.5 text-xs text-slate-400 ring-1 ring-slate-700 pointer-events-none">
+            Scroll para zoom · Arraste para mover · Esc para fechar
           </p>
         </div>
       )}

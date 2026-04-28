@@ -40,7 +40,7 @@ export default function RootLayout({
       className={`${manrope.variable} ${sourceCodePro.variable} ${petrona.variable} ${spaceGrotesk.variable} dark h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>

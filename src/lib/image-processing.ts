@@ -6,27 +6,7 @@ interface ProcessOptions {
   form: EvidenceFormData;
   logoImage?: HTMLImageElement | null;
   redactRegions?: RedactRegion[];
-}
-
-function drawRoundedRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number,
-) {
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
+  evidenceId?: string;
 }
 
 function resolveOverlayCoordinates(
@@ -52,8 +32,17 @@ function resolveOverlayCoordinates(
       return { x: right, y: bottom };
   }
 }
+/** Trunca texto com "\u2026" se exceder maxWidth no contexto do canvas. */
+function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t + "\u2026").width > maxWidth) {
+    t = t.slice(0, -1);
+  }
+  return t + "\u2026";
+}
 
-export function processEvidenceImage({ image, form, logoImage, redactRegions }: ProcessOptions): HTMLCanvasElement {
+export function processEvidenceImage({ image, form, logoImage, redactRegions, evidenceId }: ProcessOptions): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   const width = image.naturalWidth;
   const height = image.naturalHeight;
@@ -83,7 +72,6 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions }: 
           }
         }
       } else {
-        // blur: copy region to offscreen canvas, draw back with filter
         const offscreen = document.createElement("canvas");
         offscreen.width = w;
         offscreen.height = h;
@@ -98,25 +86,33 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions }: 
     }
   }
 
-  const margin = Math.max(20, Math.round(width * 0.02));
-  const boxWidth = Math.round(width * 0.44);
-  const lineHeight = Math.max(18, Math.round(width * 0.018));
-  const titleFontSize = Math.max(16, Math.round(width * 0.021));
-  const bodyFontSize = Math.max(13, Math.round(width * 0.015));
-  const padding = Math.max(16, Math.round(width * 0.017));
+  /* ── Overlay card ────────────────────────────────────────────────────── */
+  const margin     = Math.max(20, Math.round(width * 0.02));
+  const boxWidth   = Math.round(width * 0.52);
+  const lh         = Math.max(17, Math.round(width * 0.0165)); // line height
+  const titleSize  = Math.max(13, Math.round(width * 0.017));
+  const idSize     = Math.max(12, Math.round(width * 0.014));
+  const bodySize   = Math.max(11, Math.round(width * 0.013));
+  const pad        = Math.max(14, Math.round(width * 0.015));
+  const borderW    = Math.max(2, Math.round(width * 0.002));
+  const inset      = borderW + Math.max(3, Math.round(width * 0.003));
 
   const fields: [string, string][] = [
-    ["Empresa", form.sourceCompany],
-    ["CNPJ", form.sourceCnpj || "-"],
-    ["Empresa destino", form.targetCompany],
-    ["Titulo", form.evidenceTitle],
-    ["Numero de controle", form.evidenceNumber],
-    ["Data da imagem", formatDateDisplay(form.imageDate)],
-    ["Responsavel", form.responsibleName || "-"],
-    ["Area/Departamento", form.department || "-"],
+    ["EMPRESA EMISSORA",    form.sourceCompany],
+    ["CNPJ",               form.sourceCnpj || "-"],
+    ["EMPRESA REQUISITANTE", form.targetCompany],
+    ["TÍTULO DA EVIDÊNCIA", form.evidenceTitle],
+    ["NÚMERO DE CONTROLE", form.evidenceNumber],
+    ["DATA DA CAPTURA",    formatDateDisplay(form.imageDate)],
+    ["RESPONSÁVEL",        form.responsibleName || "-"],
+    ...(form.department ? [["ÁREA / DEPARTAMENTO", form.department] as [string, string]] : []),
   ];
 
-  const boxHeight = padding * 2 + lineHeight * (fields.length + 1);
+  // Heights
+  const headerHeight = pad + lh * 1.35 + lh * 1.15 + pad * 0.7;
+  const bodyHeight   = lh * 1.2 * fields.length + pad;
+  const boxHeight    = Math.round(headerHeight + 1 + bodyHeight);
+
   const { x, y } = resolveOverlayCoordinates(
     form.overlayPosition,
     width,
@@ -127,23 +123,68 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions }: 
   );
 
   const isSolid = form.overlayBackgroundStyle === "solid";
-  ctx.fillStyle = isSolid ? "rgba(12, 28, 47, 0.95)" : "rgba(12, 28, 47, 0.72)";
-  ctx.strokeStyle = "rgba(181, 214, 255, 0.4)";
-  ctx.lineWidth = Math.max(1, Math.round(width * 0.0018));
-  drawRoundedRect(ctx, x, y, boxWidth, boxHeight, Math.max(8, Math.round(width * 0.008)));
-  ctx.fill();
+
+  /* Background body */
+  ctx.fillStyle = isSolid ? "rgba(8, 18, 38, 0.97)" : "rgba(8, 18, 38, 0.84)";
+  ctx.fillRect(x, y, boxWidth, boxHeight);
+
+  /* Header tinted background */
+  ctx.fillStyle = isSolid ? "rgba(18, 40, 78, 0.98)" : "rgba(18, 40, 78, 0.88)";
+  ctx.fillRect(x, y, boxWidth, Math.round(headerHeight));
+
+  /* Outer border */
+  ctx.strokeStyle = "rgba(96, 180, 255, 0.90)";
+  ctx.lineWidth = borderW;
+  ctx.strokeRect(
+    x + borderW / 2,
+    y + borderW / 2,
+    boxWidth - borderW,
+    boxHeight - borderW,
+  );
+
+  /* Inner border (inset accent) */
+  ctx.strokeStyle = "rgba(96, 180, 255, 0.28)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + inset, y + inset, boxWidth - inset * 2, boxHeight - inset * 2);
+
+  /* Separator line at header/body junction */
+  const sepY = y + Math.round(headerHeight);
+  ctx.strokeStyle = "rgba(96, 180, 255, 0.80)";
+  ctx.lineWidth = borderW;
+  ctx.beginPath();
+  ctx.moveTo(x, sepY);
+  ctx.lineTo(x + boxWidth, sepY);
   ctx.stroke();
 
-  ctx.fillStyle = "#f8fafc";
-  ctx.font = `700 ${titleFontSize}px system-ui, -apple-system, sans-serif`;
-  ctx.fillText("EVIDENCIA CORPORATIVA", x + padding, y + padding + lineHeight * 0.8);
+  /* ── Header text ── */
+  const availW = boxWidth - pad * 2;
 
-  ctx.font = `500 ${bodyFontSize}px system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+
+  ctx.fillStyle = "#e8f4ff";
+  ctx.font = `700 ${titleSize}px system-ui, -apple-system, sans-serif`;
+  const titleText = fitText(ctx, "EVIDÊNCIA DE CONTROLE DE SEGURANÇA", availW);
+  ctx.fillText(titleText, x + boxWidth / 2, y + pad + lh * 1.1);
+
+  if (evidenceId) {
+    ctx.fillStyle = "#7dd3fc";
+    ctx.font = `600 ${idSize}px system-ui, -apple-system, sans-serif`;
+    ctx.fillText(evidenceId, x + boxWidth / 2, y + pad + lh * 1.1 + lh * 1.2);
+  }
+
+  /* ── Body fields ── */
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#dbeafe";
+  ctx.font = `500 ${bodySize}px system-ui, -apple-system, sans-serif`;
+
+  const bodyStartY = sepY + lh * 1.1;
   fields.forEach(([label, value], idx) => {
-    const line = `${label.toUpperCase()}: ${value.toUpperCase()}`;
-    ctx.fillText(line, x + padding, y + padding + lineHeight * (idx + 2));
+    const line = `${label}: ${value.toUpperCase()}`;
+    ctx.fillText(fitText(ctx, line, availW), x + pad, bodyStartY + lh * 1.2 * idx);
   });
 
+  /* ── Watermark text ────────────────────────────────────────────────── */
   if (form.watermarkEnabled && form.watermarkText.trim()) {
     const wmText = form.watermarkText.toUpperCase();
     ctx.save();
@@ -156,7 +197,7 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions }: 
     ctx.restore();
   }
 
-  /* ── Logo Slice como marca d’água (sempre visível, canto superior esquerdo) ── */
+  /* ── Logo Slice (marca d'água, canto inferior direito) ─────────────── */
   if (logoImage) {
     const logoMargin = Math.max(16, Math.round(width * 0.018));
     const logoW = Math.round(width * 0.14);

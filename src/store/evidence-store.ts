@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { buildBatchKey, generateEvidenceId } from "@/lib/evidence-id";
 import { formatDateInput } from "@/lib/utils";
 import { type EvidenceFormData, type SavedConfiguration, type UserPreset } from "@/types/evidence";
 
@@ -11,7 +12,7 @@ const today = formatDateInput(new Date());
 export const defaultFormData: EvidenceFormData = {
   sourceCompany: DEFAULT_SOURCE_COMPANY,
   sourceCnpj: DEFAULT_SOURCE_CNPJ,
-  targetCompany: "EMPRESA AUDITADA",
+  targetCompany: "EMPRESA AUDITORA",
   evidenceTitle: "Comprovacao de controle de seguranca",
   evidenceNumber: "14.1",
   imageDate: today,
@@ -27,12 +28,20 @@ interface EvidenceStore {
   lastFormData: EvidenceFormData;
   recentConfigurations: SavedConfiguration[];
   userPresets: UserPreset[];
+  /** Chave do lote atual (empresa+controle+data) para rastrear sequência */
+  batchKey: string;
+  /** Contador de sequência dentro do lote atual */
+  batchSeq: number;
   setLastFormData: (data: EvidenceFormData) => void;
   saveConfiguration: (data: EvidenceFormData) => void;
   loadConfiguration: (id: string) => EvidenceFormData | null;
   savePreset: (name: string, data: Partial<EvidenceFormData>) => UserPreset;
   updatePreset: (id: string, name: string, data: Partial<EvidenceFormData>) => void;
   deletePreset: (id: string) => void;
+  /** Gera o próximo ID e incrementa o contador de sequência */
+  nextEvidenceId: (targetCompany: string, evidenceNumber: string, imageDate: string) => string;
+  /** Espia o próximo ID sem incrementar (para preview) */
+  peekEvidenceId: (targetCompany: string, evidenceNumber: string, imageDate: string) => string;
 }
 
 export const useEvidenceStore = create<EvidenceStore>()(
@@ -41,7 +50,22 @@ export const useEvidenceStore = create<EvidenceStore>()(
       lastFormData: defaultFormData,
       recentConfigurations: [],
       userPresets: [],
+      batchKey: "",
+      batchSeq: 0,
       setLastFormData: (data) => set({ lastFormData: data }),
+      nextEvidenceId: (targetCompany, evidenceNumber, imageDate) => {
+        const key = buildBatchKey(targetCompany, evidenceNumber, imageDate);
+        const { batchKey, batchSeq } = get();
+        const newSeq = key === batchKey ? batchSeq + 1 : 1;
+        set({ batchKey: key, batchSeq: newSeq });
+        return generateEvidenceId(targetCompany, evidenceNumber, imageDate, newSeq);
+      },
+      peekEvidenceId: (targetCompany, evidenceNumber, imageDate) => {
+        const key = buildBatchKey(targetCompany, evidenceNumber, imageDate);
+        const { batchKey, batchSeq } = get();
+        const previewSeq = key === batchKey ? batchSeq + 1 : 1;
+        return generateEvidenceId(targetCompany, evidenceNumber, imageDate, previewSeq);
+      },
       saveConfiguration: (data) => {
         const stamp = new Date().toISOString();
         const label = `${data.evidenceNumber || "SEM_NUM"} - ${data.evidenceTitle || "SEM_TITULO"}`;
@@ -92,6 +116,8 @@ export const useEvidenceStore = create<EvidenceStore>()(
         lastFormData: state.lastFormData,
         recentConfigurations: state.recentConfigurations,
         userPresets: state.userPresets,
+        batchKey: state.batchKey,
+        batchSeq: state.batchSeq,
       }),
     },
   ),

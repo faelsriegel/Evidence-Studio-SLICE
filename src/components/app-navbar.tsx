@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { type AuthUser } from "@/lib/auth";
 
 export function AppNavbar({ user }: { user: AuthUser }) {
@@ -24,8 +25,8 @@ export function AppNavbar({ user }: { user: AuthUser }) {
       <div className="navbar-slice__actions">
         <span className="badge-slice">{user.role === "admin" ? "Admin" : "Membro"}</span>
         <span className="navbar-slice__user">{user.name}</span>
-        <button onClick={handleLogout} className="btn-slice btn-slice--ghost" type="button">
-          Sair
+        <button onClick={handleLogout} className="btn-slice btn-slice--ghost" type="button" title="Sair">
+          <LogOut size={16} />
         </button>
       </div>
     </header>
