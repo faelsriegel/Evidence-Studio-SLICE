@@ -12,7 +12,7 @@ const today = formatDateInput(new Date());
 export const defaultFormData: EvidenceFormData = {
   sourceCompany: DEFAULT_SOURCE_COMPANY,
   sourceCnpj: DEFAULT_SOURCE_CNPJ,
-  targetCompany: "EMPRESA AUDITORA",
+  targetCompany: "",
   questionnaireTitle: "",
   evidenceAcronym: "",
   forceSequence: false,
@@ -26,8 +26,8 @@ export const defaultFormData: EvidenceFormData = {
   watermarkEnabled: true,
   watermarkText: "USO EXCLUSIVO AUDITORIA",
   logoVariant: "white" as const,
-  logoPosition: "bottom-left",
-  overlayPosition: "bottom-right",
+  logoPosition: "bottom-right",
+  overlayPosition: "top-right",
   overlayBackgroundStyle: "translucent",
 };
 

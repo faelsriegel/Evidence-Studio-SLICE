@@ -532,19 +532,19 @@ export function EvidenceGenerator() {
               <Section title="Dados da evidencia">
                 <FieldGrid>
                   <F label="Empresa auditora" full>
-                    <Input id="targetCompany" {...register("targetCompany", { required: true })} />
+                    <Input id="targetCompany" placeholder="Digite o nome da empresa" {...register("targetCompany", { required: true })} />
                     {errors.targetCompany && (
                       <p className="text-[11px] text-rose-400">Campo obrigatorio.</p>
                     )}
                   </F>
                   <F label="Titulo do questionario" full>
-                    <Input id="questionnaireTitle" placeholder="Nome do questionario (opcional)" {...register("questionnaireTitle")} />
+                    <Input id="questionnaireTitle" placeholder="Digite o titulo (opcional)" {...register("questionnaireTitle")} />
                   </F>
                   <F label="Titulo da evidencia" full>
-                    <Input id="evidenceTitle" placeholder="Enunciado / titulo da questao (opcional)" {...register("evidenceTitle")} />
+                    <Input id="evidenceTitle" placeholder="Digite o requisito ou titulo (opcional)" {...register("evidenceTitle")} />
                   </F>
                   <F label="Numero de controle">
-                    <Input id="evidenceNumber" placeholder="14.1" {...register("evidenceNumber", { required: true })} />
+                    <Input id="evidenceNumber" placeholder="Digite o numero de controle" {...register("evidenceNumber", { required: true })} />
                   </F>
                   <F label="Data da imagem">
                     <Input id="imageDate" type="date" {...register("imageDate", { required: true })} />
@@ -556,22 +556,22 @@ export function EvidenceGenerator() {
               <Section title="Mais detalhes" description="Emissor, responsavel e sigla" collapsible defaultOpen={false}>
                 <FieldGrid>
                   <F label="Empresa emissora">
-                    <Input id="sourceCompany" {...register("sourceCompany", { required: true })} />
+                    <Input id="sourceCompany" placeholder="Digite o nome da empresa" {...register("sourceCompany", { required: true })} />
                   </F>
                   <F label="CNPJ">
                     <Input id="sourceCnpj" placeholder="00.000.000/0001-00" {...register("sourceCnpj")} />
                   </F>
                   <F label="Responsavel">
-                    <Input id="responsibleName" {...register("responsibleName")} />
+                    <Input id="responsibleName" placeholder="Digite o nome do responsavel" {...register("responsibleName")} />
                   </F>
                   <F label="Area / Departamento">
-                    <Input id="department" {...register("department")} />
+                    <Input id="department" placeholder="Digite a area ou departamento" {...register("department")} />
                   </F>
                   <F label="Observacoes" full>
                     <Input id="observations" placeholder="Texto opcional para observacoes" {...register("observations")} />
                   </F>
                   <F label="Sigla do ID" hint="vazio = automatico" full>
-                    <Input id="evidenceAcronym" placeholder="Ex: BRA" maxLength={6} {...register("evidenceAcronym")} />
+                    <Input id="evidenceAcronym" placeholder="Digite a sigla (opcional)" maxLength={6} {...register("evidenceAcronym")} />
                   </F>
                 </FieldGrid>
 
