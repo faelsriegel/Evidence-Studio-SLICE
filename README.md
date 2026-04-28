@@ -1,36 +1,102 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Gerador de Evidencias Corporativas
 
-## Getting Started
+Aplicacao web profissional em Next.js (App Router) para padronizacao e geracao de evidencias de compliance, auditoria, LGPD e seguranca da informacao.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router)
+- TypeScript
+- Tailwind CSS
+- UI componentizada no estilo shadcn/ui
+- React Hook Form
+- Zustand (persistencia local)
+- Canvas API (processamento de imagem client-side)
+- EXIF parsing com exifr
+- Pronto para deploy na Vercel
+
+## Funcionalidades implementadas
+
+- Upload seguro de imagens PNG/JPG/JPEG (com limite de tamanho)
+- Leitura automatica de data via EXIF quando disponivel
+- Fallback de data para ultima modificacao e depois data atual
+- Quadro informativo configuravel nos 4 cantos:
+	- Superior esquerdo
+	- Superior direito
+	- Inferior esquerdo
+	- Inferior direito
+- Campos dinamicos de evidencia:
+	- Empresa de origem (predefinida)
+	- Empresa destinataria
+	- Titulo da evidencia
+	- Numero da evidencia
+	- Numero da questao
+	- Data da imagem
+	- Data de emissao
+	- Responsavel (opcional)
+	- Area/Departamento (opcional)
+- Fundo do quadro configuravel (solido ou semitransparente)
+- Marca d'agua opcional
+- Preview em tempo real
+- Exportacao em alta resolucao
+- Nome de arquivo padronizado:
+	- `EVIDENCIA_[NUMERO]_[EMPRESA]_[DATA].png`
+- Download automatico ao gerar
+- Historico local das ultimas configuracoes
+- Tema claro/escuro
+- Layout responsivo em estilo dashboard corporativo
+- Tela de login com UX no mesmo padrao do projeto e-SignMail_SLICE
+- Sessao autenticada com cookie JWT (login, logout e endpoint /api/auth/me)
+
+## Como executar
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Aplicacao disponivel em `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Login
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- URL: `http://localhost:3000/login`
+- Usuario padrao: `infra` (ou `infra@slice.global`)
+- Senha padrao: `infra`
 
-## Learn More
+Voce pode sobrescrever por variaveis de ambiente:
 
-To learn more about Next.js, take a look at the following resources:
+- `AUTH_USER_ID`
+- `AUTH_NAME`
+- `AUTH_USERNAME`
+- `AUTH_EMAIL`
+- `AUTH_PASSWORD`
+- `JWT_SECRET`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Qualidade e validacao
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run lint
+npm run build
+```
 
-## Deploy on Vercel
+## Deploy na Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Conecte o repositorio na Vercel.
+2. Framework detectado automaticamente: `Next.js`.
+3. Comando de build: `npm run build`.
+4. Output: padrao do Next.js.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Estrutura principal
+
+- `src/app`: rotas App Router e estilos globais
+- `src/components`: dashboard, providers e componentes de UI
+- `src/store`: estado global e historico local (Zustand)
+- `src/lib`: metadados EXIF, processamento em canvas e utilitarios
+- `src/types`: tipos centrais da aplicacao
+
+## Roadmap de expansao
+
+- Autenticacao e controle por perfil
+- Persistencia em banco de dados
+- Assinatura digital de evidencias
+- Trilhas de auditoria e logs
+- Geração em lote e templates por cliente
