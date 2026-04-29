@@ -693,6 +693,18 @@ export function EvidenceGenerator() {
                       <option value="solid">Solido</option>
                     </Select>
                   </F>
+                  <F label="Opacidade do quadro">
+                    <Select id="overlayOpacityMode" {...register("overlayOpacityMode")}>
+                      <option value="normal">Normal</option>
+                      <option value="high">Alta (tela clara)</option>
+                    </Select>
+                  </F>
+                  <F label="Cor da fonte do quadro">
+                    <Select id="overlayTextColor" {...register("overlayTextColor")}>
+                      <option value="light">Clara</option>
+                      <option value="black">Preta</option>
+                    </Select>
+                  </F>
                   <F label="Logo Slice">
                     <div className="grid grid-cols-2 gap-1.5">
                       {(["white", "dark"] as const).map((variant) => {
@@ -761,12 +773,16 @@ export function EvidenceGenerator() {
                       />
                     </div>
                     {currentValues.watermarkEnabled && (
-                      <div className="mt-3">
+                      <div className="mt-3 space-y-2">
                         <Input
                           id="watermarkText"
                           placeholder="Texto da marca d'agua"
                           {...register("watermarkText")}
                         />
+                        <Select id="watermarkColorMode" {...register("watermarkColorMode")}>
+                          <option value="light">Marca d'agua clara</option>
+                          <option value="dark">Marca d'agua escura (tela clara)</option>
+                        </Select>
                       </div>
                     )}
                   </div>

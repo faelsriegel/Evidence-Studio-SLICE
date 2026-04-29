@@ -5,6 +5,9 @@ export type OverlayPosition =
   | "bottom-right";
 
 export type OverlayBackgroundStyle = "solid" | "translucent";
+export type OverlayOpacityMode = "normal" | "high";
+export type OverlayTextColor = "light" | "black";
+export type WatermarkColorMode = "light" | "dark";
 
 export type LogoVariant = "white" | "dark";
 
@@ -29,6 +32,9 @@ export interface EvidenceFormData {
   logoPosition: OverlayPosition;
   overlayPosition: OverlayPosition;
   overlayBackgroundStyle: OverlayBackgroundStyle;
+  overlayOpacityMode: OverlayOpacityMode;
+  overlayTextColor: OverlayTextColor;
+  watermarkColorMode: WatermarkColorMode;
 }
 
 export interface SavedConfiguration {

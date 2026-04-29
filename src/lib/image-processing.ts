@@ -193,13 +193,27 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
   );
 
   const isSolid = form.overlayBackgroundStyle === "solid";
+  const highOverlayOpacity = form.overlayOpacityMode === "high";
+  const blackOverlayText = form.overlayTextColor === "black";
 
   /* Background body */
-  ctx.fillStyle = isSolid ? "rgba(8, 18, 38, 0.52)" : "rgba(8, 18, 38, 0.32)";
+  ctx.fillStyle = isSolid
+    ? highOverlayOpacity
+      ? "rgba(8, 18, 38, 0.72)"
+      : "rgba(8, 18, 38, 0.52)"
+    : highOverlayOpacity
+      ? "rgba(8, 18, 38, 0.52)"
+      : "rgba(8, 18, 38, 0.32)";
   ctx.fillRect(x, y, boxWidth, boxHeight);
 
   /* Header tinted background */
-  ctx.fillStyle = isSolid ? "rgba(18, 40, 78, 0.58)" : "rgba(18, 40, 78, 0.38)";
+  ctx.fillStyle = isSolid
+    ? highOverlayOpacity
+      ? "rgba(18, 40, 78, 0.80)"
+      : "rgba(18, 40, 78, 0.58)"
+    : highOverlayOpacity
+      ? "rgba(18, 40, 78, 0.58)"
+      : "rgba(18, 40, 78, 0.38)";
   ctx.fillRect(x, y, boxWidth, Math.round(headerHeight));
 
   /* Outer border */
@@ -230,20 +244,20 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
 
-  ctx.fillStyle = "rgba(232, 244, 255, 0.85)";
+  ctx.fillStyle = blackOverlayText ? "rgba(0, 0, 0, 0.92)" : "rgba(232, 244, 255, 0.85)";
   ctx.font = `700 ${titleSize}px system-ui, -apple-system, sans-serif`;
   const titleText = fitText(ctx, "EVIDÊNCIA DE CONTROLE DE SEGURANÇA", availW);
   ctx.fillText(titleText, x + boxWidth / 2, y + pad + lh * 1.1);
 
   if (evidenceId) {
-    ctx.fillStyle = "rgba(125, 211, 252, 0.80)";
+    ctx.fillStyle = blackOverlayText ? "rgba(0, 0, 0, 0.84)" : "rgba(125, 211, 252, 0.80)";
     ctx.font = `600 ${idSize}px system-ui, -apple-system, sans-serif`;
     ctx.fillText(evidenceId, x + boxWidth / 2, y + pad + lh * 1.1 + lh * 1.2);
   }
 
   /* ── Body fields ── */
   ctx.textAlign = "left";
-  ctx.fillStyle = "rgba(219, 234, 254, 0.78)";
+  ctx.fillStyle = blackOverlayText ? "rgba(0, 0, 0, 0.86)" : "rgba(219, 234, 254, 0.78)";
   ctx.font = `400 ${bodySize}px system-ui, -apple-system, sans-serif`;
 
   const bodyStartY = sepY + lh * 1.1;
@@ -274,7 +288,9 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
     ctx.translate(width / 2, height / 2);
     ctx.rotate((-20 * Math.PI) / 180);
     ctx.textAlign = "center";
-    ctx.fillStyle = "rgba(255, 255, 255, 0.24)";
+    ctx.fillStyle = form.watermarkColorMode === "dark"
+      ? "rgba(0, 0, 0, 0.24)"
+      : "rgba(255, 255, 255, 0.24)";
     ctx.font = `700 ${Math.max(30, Math.round(width * 0.05))}px system-ui, sans-serif`;
     ctx.fillText(wmText, 0, 0);
     ctx.restore();

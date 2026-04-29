@@ -30,6 +30,9 @@ export const defaultFormData: EvidenceFormData = {
   logoPosition: "bottom-right",
   overlayPosition: "top-right",
   overlayBackgroundStyle: "translucent",
+  overlayOpacityMode: "normal",
+  overlayTextColor: "light",
+  watermarkColorMode: "light",
 };
 
 interface EvidenceStore {
