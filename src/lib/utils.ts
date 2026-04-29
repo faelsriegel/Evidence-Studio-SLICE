@@ -9,6 +9,12 @@ export function formatDateInput(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+export function formatTimeInput(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
 export function formatDateDisplay(value: string): string {
   if (!value) {
     return "-";

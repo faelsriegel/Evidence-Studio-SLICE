@@ -29,12 +29,13 @@ export async function resolveBestImageDate(file: File): Promise<Date> {
     // EXIF pode estar ausente ou corrompido; seguimos fallback seguro.
   }
 
-  if (file.lastModified) {
+  if (Number.isFinite(file.lastModified) && file.lastModified >= 0) {
     const modified = new Date(file.lastModified);
     if (!Number.isNaN(modified.getTime())) {
       return modified;
     }
   }
 
-  return new Date();
+  // Evita usar "agora"; se não houver metadado válido, retorna época Unix.
+  return new Date(0);
 }

@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { processEvidenceImage } from "@/lib/image-processing";
 import { resolveBestImageDate } from "@/lib/metadata";
-import { formatDateInput, sanitizeForFileName } from "@/lib/utils";
+import { formatDateInput, formatTimeInput, sanitizeForFileName } from "@/lib/utils";
 import { defaultFormData, useEvidenceStore } from "@/store/evidence-store";
 import { type EvidenceFormData, type OverlayPosition, type RedactRegion } from "@/types/evidence";
 import { toast } from "sonner";
@@ -163,6 +163,7 @@ export function EvidenceGenerator() {
 
   const [fileName, setFileName] = useState<string>("");
   const [detectedDate, setDetectedDate] = useState<string>("");
+  const [detectedTime, setDetectedTime] = useState<string>("");
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -368,7 +369,10 @@ export function EvidenceGenerator() {
       setSourceImage(img);
       setFileName(file.name);
       setDetectedDate(parsedDate);
+      const parsedTime = formatTimeInput(bestDate);
+      setDetectedTime(parsedTime);
       setValue("imageDate", parsedDate, { shouldValidate: true });
+      setValue("imageTime", parsedTime, { shouldValidate: true });
       setRedactRegions([]);
       setRedactMode(null);
     } catch {
@@ -529,7 +533,10 @@ export function EvidenceGenerator() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-semibold text-emerald-300">{fileName}</p>
                         {detectedDate && (
-                          <p className="text-[11px] text-slate-400">Data detectada: {detectedDate}</p>
+                          <p className="text-[11px] text-slate-400">
+                            Data detectada: {detectedDate}
+                            {detectedTime ? ` ${detectedTime}` : ""}
+                          </p>
                         )}
                       </div>
                       <span className="shrink-0 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-400">
@@ -577,6 +584,13 @@ export function EvidenceGenerator() {
                   </F>
                   <F label="Data da imagem">
                     <Input id="imageDate" type="date" {...register("imageDate", { required: true })} />
+                  </F>
+                  <F label="Hora da imagem">
+                    <Input
+                      id="imageTime"
+                      type="time"
+                      {...register("imageTime")}
+                    />
                   </F>
                 </FieldGrid>
               </Section>

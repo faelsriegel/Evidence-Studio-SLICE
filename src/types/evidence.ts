@@ -19,6 +19,7 @@ export interface EvidenceFormData {
   evidenceTitle: string;
   evidenceNumber: string;
   imageDate: string;
+  imageTime?: string;
   responsibleName?: string;
   department?: string;
   observations?: string;

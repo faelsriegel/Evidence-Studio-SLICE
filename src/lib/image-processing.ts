@@ -151,6 +151,8 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
     ["CNPJ",               form.sourceCnpj || "-"],
     ["REFERÊNCIA DE CONFORMIDADE", form.questionnaireTitle || "-"],
     ["NÚMERO DE CONTROLE EXTERNO", form.evidenceNumber || "-"],
+    ["DATA DA IMAGEM",     formatDateDisplay(form.imageDate)],
+    ["HORA DA IMAGEM",     form.imageTime || "-"],
     ...(form.evidenceTitle?.trim()
       ? [["REQUISITO / TÍTULO EXTERNO", form.evidenceTitle] as [string, string]]
       : [["REQUISITO / TÍTULO EXTERNO", "-"] as [string, string]]),
@@ -272,8 +274,8 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
     ctx.translate(width / 2, height / 2);
     ctx.rotate((-20 * Math.PI) / 180);
     ctx.textAlign = "center";
-    ctx.fillStyle = "rgba(255, 255, 255, 0.50)";
-    ctx.font = `700 ${Math.max(34, Math.round(width * 0.055))}px system-ui, sans-serif`;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.24)";
+    ctx.font = `700 ${Math.max(30, Math.round(width * 0.05))}px system-ui, sans-serif`;
     ctx.fillText(wmText, 0, 0);
     ctx.restore();
   }

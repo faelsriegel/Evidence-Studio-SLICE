@@ -20,6 +20,7 @@ export const defaultFormData: EvidenceFormData = {
   evidenceTitle: "",
   evidenceNumber: "14.1",
   imageDate: today,
+  imageTime: "",
   responsibleName: "DPO",
   department: "Seguranca da Informacao",
   observations: "",
