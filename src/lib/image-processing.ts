@@ -246,7 +246,10 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
 
   ctx.fillStyle = blackOverlayText ? "rgba(0, 0, 0, 0.92)" : "rgba(232, 244, 255, 0.85)";
   ctx.font = `700 ${titleSize}px system-ui, -apple-system, sans-serif`;
-  const titleText = fitText(ctx, "EVIDÊNCIA DE CONTROLE DE SEGURANÇA", availW);
+  const headerTitleRaw = (form.headerTitle && form.headerTitle.trim())
+    ? form.headerTitle.toUpperCase()
+    : "EVIDÊNCIA DE CONTROLE DE SEGURANÇA";
+  const titleText = fitText(ctx, headerTitleRaw, availW);
   ctx.fillText(titleText, x + boxWidth / 2, y + pad + lh * 1.1);
 
   if (evidenceId) {
@@ -297,7 +300,7 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
   }
 
   /* ── Logo Slice (marca d'água, canto escolhido) ─────────────────────── */
-  if (logoImage) {
+  if (logoImage && form.logoEnabled !== false) {
     const logoMargin = Math.max(16, Math.round(width * 0.018));
     const logoW = Math.round(width * 0.14);
     const logoH = Math.round(logoW * (logoImage.naturalHeight / logoImage.naturalWidth));

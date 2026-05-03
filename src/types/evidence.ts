@@ -28,6 +28,8 @@ export interface EvidenceFormData {
   observations?: string;
   watermarkEnabled: boolean;
   watermarkText: string;
+  headerTitle: string;
+  logoEnabled: boolean;
   logoVariant: LogoVariant;
   logoPosition: OverlayPosition;
   overlayPosition: OverlayPosition;

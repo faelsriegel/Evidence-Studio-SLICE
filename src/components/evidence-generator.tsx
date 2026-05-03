@@ -657,6 +657,13 @@ export function EvidenceGenerator() {
 
               {/* Aparencia (colapsavel) */}
               <Section title="Aparencia do quadro" description="Posicao, fundo, logo e marca d'agua" collapsible defaultOpen={false}>
+                <F label="Titulo do quadro" hint="Texto exibido no topo da evidencia" full>
+                  <Input
+                    id="headerTitle"
+                    placeholder="EVIDENCIA DE CONTROLE DE SEGURANCA"
+                    {...register("headerTitle")}
+                  />
+                </F>
                 <F label="Posicao do quadro" full>
                   <div className="grid grid-cols-2 gap-1.5">
                     {positionOptions.map((item) => {
@@ -709,16 +716,19 @@ export function EvidenceGenerator() {
                     <div className="grid grid-cols-2 gap-1.5">
                       {(["white", "dark"] as const).map((variant) => {
                         const isActive = (currentValues.logoVariant ?? "white") === variant;
+                        const disabled = currentValues.logoEnabled === false;
                         return (
                           <button
                             key={variant}
                             type="button"
+                            disabled={disabled}
                             onClick={() => setValue("logoVariant", variant, { shouldValidate: true })}
                             className={[
                               "h-9 rounded-lg border text-[11px] font-medium transition",
                               isActive
                                 ? "border-sky-500 bg-sky-500/10 text-sky-300"
                                 : "border-slate-700 text-slate-400 hover:border-slate-600 hover:bg-slate-800",
+                              disabled ? "cursor-not-allowed opacity-40" : "",
                             ].join(" ")}
                           >
                             {variant === "white" ? "Branco" : "Escuro"}
@@ -729,21 +739,42 @@ export function EvidenceGenerator() {
                   </F>
                 </FieldGrid>
 
+                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon size={14} className="text-slate-500" />
+                      <div>
+                        <p className="text-[12px] font-medium text-slate-200">Logo Slice</p>
+                        <p className="text-[11px] text-slate-500">Exibir a marca Slice na imagem</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={currentValues.logoEnabled !== false}
+                      onCheckedChange={(next) =>
+                        setValue("logoEnabled", next, { shouldValidate: true })
+                      }
+                    />
+                  </div>
+                </div>
+
                 <F label="Canto da logo Slice" full>
                   <div className="grid grid-cols-2 gap-1.5">
                     {positionOptions.map((item) => {
                       const isActive = (currentValues.logoPosition ?? "bottom-left") === item.value;
+                      const disabled = currentValues.logoEnabled === false;
                       return (
                         <button
                           key={`logo-${item.value}`}
                           type="button"
                           title={item.label}
+                          disabled={disabled}
                           onClick={() => setValue("logoPosition", item.value, { shouldValidate: true })}
                           className={[
                             "rounded-lg border px-2 py-2 text-[11px] font-medium transition",
                             isActive
                               ? "border-sky-500 bg-sky-500/10 text-sky-300"
                               : "border-slate-700 text-slate-400 hover:border-slate-600 hover:bg-slate-800",
+                            disabled ? "cursor-not-allowed opacity-40" : "",
                           ].join(" ")}
                         >
                           {item.label.replace("Superior ", "Sup. ").replace("Inferior ", "Inf. ")}

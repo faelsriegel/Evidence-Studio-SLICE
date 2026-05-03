@@ -26,6 +26,8 @@ export const defaultFormData: EvidenceFormData = {
   observations: "",
   watermarkEnabled: true,
   watermarkText: "USO EXCLUSIVO AUDITORIA",
+  headerTitle: "EVIDÊNCIA DE CONTROLE DE SEGURANÇA",
+  logoEnabled: true,
   logoVariant: "white" as const,
   logoPosition: "bottom-right",
   overlayPosition: "top-right",
