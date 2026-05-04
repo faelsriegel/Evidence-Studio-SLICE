@@ -24,6 +24,7 @@ export const defaultFormData: EvidenceFormData = {
   responsibleName: "DPO",
   department: "Seguranca da Informacao",
   observations: "",
+  overlayEnabled: true,
   watermarkEnabled: true,
   watermarkText: "USO EXCLUSIVO AUDITORIA",
   headerTitle: "EVIDÊNCIA DE CONTROLE DE SEGURANÇA",

@@ -657,9 +657,25 @@ export function EvidenceGenerator() {
 
               {/* Aparencia (colapsavel) */}
               <Section title="Aparencia do quadro" description="Posicao, fundo, logo e marca d'agua" collapsible defaultOpen={false}>
+                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[12px] font-medium text-slate-200">Quadro de rotulo</p>
+                      <p className="text-[11px] text-slate-500">Exibir o bloco completo com titulo, ID e metadados</p>
+                    </div>
+                    <Switch
+                      checked={currentValues.overlayEnabled !== false}
+                      onCheckedChange={(next) =>
+                        setValue("overlayEnabled", next, { shouldValidate: true })
+                      }
+                    />
+                  </div>
+                </div>
+
                 <F label="Titulo do quadro" hint="Texto exibido no topo da evidencia" full>
                   <Input
                     id="headerTitle"
+                    disabled={currentValues.overlayEnabled === false}
                     placeholder="EVIDENCIA DE CONTROLE DE SEGURANCA"
                     {...register("headerTitle")}
                   />
@@ -668,10 +684,12 @@ export function EvidenceGenerator() {
                   <div className="grid grid-cols-2 gap-1.5">
                     {positionOptions.map((item) => {
                       const isActive = currentValues.overlayPosition === item.value;
+                      const disabled = currentValues.overlayEnabled === false;
                       return (
                         <button
                           key={item.value}
                           type="button"
+                          disabled={disabled}
                           title={item.label}
                           onClick={() =>
                             setValue("overlayPosition", item.value, { shouldValidate: true })
@@ -681,6 +699,7 @@ export function EvidenceGenerator() {
                             isActive
                               ? "border-sky-500 bg-sky-500/10 text-sky-300"
                               : "border-slate-700 text-slate-400 hover:border-slate-600 hover:bg-slate-800",
+                            disabled ? "cursor-not-allowed opacity-40" : "",
                           ].join(" ")}
                         >
                           {item.label.replace("Superior ", "Sup. ").replace("Inferior ", "Inf. ")}
@@ -695,19 +714,31 @@ export function EvidenceGenerator() {
 
                 <FieldGrid>
                   <F label="Fundo do quadro">
-                    <Select id="overlayBackgroundStyle" {...register("overlayBackgroundStyle")}>
+                    <Select
+                      id="overlayBackgroundStyle"
+                      disabled={currentValues.overlayEnabled === false}
+                      {...register("overlayBackgroundStyle")}
+                    >
                       <option value="translucent">Semitransparente</option>
                       <option value="solid">Solido</option>
                     </Select>
                   </F>
                   <F label="Opacidade do quadro">
-                    <Select id="overlayOpacityMode" {...register("overlayOpacityMode")}>
+                    <Select
+                      id="overlayOpacityMode"
+                      disabled={currentValues.overlayEnabled === false}
+                      {...register("overlayOpacityMode")}
+                    >
                       <option value="normal">Normal</option>
                       <option value="high">Alta (tela clara)</option>
                     </Select>
                   </F>
                   <F label="Cor da fonte do quadro">
-                    <Select id="overlayTextColor" {...register("overlayTextColor")}>
+                    <Select
+                      id="overlayTextColor"
+                      disabled={currentValues.overlayEnabled === false}
+                      {...register("overlayTextColor")}
+                    >
                       <option value="light">Clara</option>
                       <option value="black">Preta</option>
                     </Select>
@@ -807,12 +838,12 @@ export function EvidenceGenerator() {
                       <div className="mt-3 space-y-2">
                         <Input
                           id="watermarkText"
-                          placeholder="Texto da marca d'agua"
+                          placeholder="Texto da marca d&apos;agua"
                           {...register("watermarkText")}
                         />
                         <Select id="watermarkColorMode" {...register("watermarkColorMode")}>
-                          <option value="light">Marca d'agua clara</option>
-                          <option value="dark">Marca d'agua escura (tela clara)</option>
+                          <option value="light">Marca d&apos;agua clara</option>
+                          <option value="dark">Marca d&apos;agua escura (tela clara)</option>
                         </Select>
                       </div>
                     )}

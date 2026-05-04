@@ -26,6 +26,7 @@ export interface EvidenceFormData {
   responsibleName?: string;
   department?: string;
   observations?: string;
+  overlayEnabled: boolean;
   watermarkEnabled: boolean;
   watermarkText: string;
   headerTitle: string;

@@ -136,153 +136,158 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
   }
 
   /* ── Overlay card ────────────────────────────────────────────────────── */
-  const margin     = Math.max(20, Math.round(width * 0.02));
-  const boxWidth   = Math.round(width * 0.34);
-  const lh         = Math.max(14, Math.round(width * 0.013)); // line height
-  const titleSize  = Math.max(11, Math.round(width * 0.013));
-  const idSize     = Math.max(10, Math.round(width * 0.011));
-  const bodySize   = Math.max(9,  Math.round(width * 0.010));
-  const pad        = Math.max(10, Math.round(width * 0.012));
-  const borderW    = Math.max(1, Math.round(width * 0.0015));
-  const inset      = borderW + Math.max(2, Math.round(width * 0.002));
+  const overlayEnabled = form.overlayEnabled !== false;
+  const hasActiveLogo = form.logoEnabled !== false;
 
-  const fields: [string, string][] = [
-    ["EMPRESA",            form.sourceCompany],
-    ["CNPJ",               form.sourceCnpj || "-"],
-    ["REFERÊNCIA DE CONFORMIDADE", form.questionnaireTitle || "-"],
-    ["NÚMERO DE CONTROLE EXTERNO", form.evidenceNumber || "-"],
-    ["DATA DA IMAGEM",     formatDateDisplay(form.imageDate)],
-    ["HORA DA IMAGEM",     form.imageTime || "-"],
-    ...(form.evidenceTitle?.trim()
-      ? [["REQUISITO / TÍTULO EXTERNO", form.evidenceTitle] as [string, string]]
-      : [["REQUISITO / TÍTULO EXTERNO", "-"] as [string, string]]),
-    ["EMPRESA REQUISITANTE", form.targetCompany],
-    ["RESPONSÁVEL",        form.responsibleName || "-"],
-    ...(form.department ? [["ÁREA / DEPARTAMENTO", form.department] as [string, string]] : []),
-    ...(form.observations?.trim() ? [["OBSERVAÇÕES", form.observations] as [string, string]] : []),
-  ];
+  if (overlayEnabled) {
+    const margin     = Math.max(20, Math.round(width * 0.02));
+    const boxWidth   = Math.round(width * 0.34);
+    const lh         = Math.max(14, Math.round(width * 0.013)); // line height
+    const titleSize  = Math.max(11, Math.round(width * 0.013));
+    const idSize     = Math.max(10, Math.round(width * 0.011));
+    const bodySize   = Math.max(9,  Math.round(width * 0.010));
+    const pad        = Math.max(10, Math.round(width * 0.012));
+    const borderW    = Math.max(1, Math.round(width * 0.0015));
+    const inset      = borderW + Math.max(2, Math.round(width * 0.002));
 
-  // Heights — pré-calcula linhas extras dos campos que podem quebrar em 2 linhas
-  const availW = boxWidth - pad * 2;
-  ctx.font = `400 ${bodySize}px system-ui, -apple-system, sans-serif`;
-  const referenciaValue = `REFERÊNCIA DE CONFORMIDADE: ${(form.questionnaireTitle || "-").toUpperCase()}`;
-  const referenciaLines = wrapText(ctx, referenciaValue, availW, 2);
-  const hasTitulo = !!form.evidenceTitle?.trim();
-  const tituloValue = hasTitulo
-    ? `REQUISITO / TÍTULO EXTERNO: ${form.evidenceTitle.toUpperCase()}`
-    : "REQUISITO / TÍTULO EXTERNO: -";
-  const tituloLines = wrapText(ctx, tituloValue, availW, 2);
-  const extraLines  = Math.max(0, referenciaLines.length - 1) + Math.max(0, tituloLines.length - 1);
+    const fields: [string, string][] = [
+      ["EMPRESA",            form.sourceCompany],
+      ["CNPJ",               form.sourceCnpj || "-"],
+      ["REFERÊNCIA DE CONFORMIDADE", form.questionnaireTitle || "-"],
+      ["NÚMERO DE CONTROLE EXTERNO", form.evidenceNumber || "-"],
+      ["DATA DA IMAGEM",     formatDateDisplay(form.imageDate)],
+      ["HORA DA IMAGEM",     form.imageTime || "-"],
+      ...(form.evidenceTitle?.trim()
+        ? [["REQUISITO / TÍTULO EXTERNO", form.evidenceTitle] as [string, string]]
+        : [["REQUISITO / TÍTULO EXTERNO", "-"] as [string, string]]),
+      ["EMPRESA REQUISITANTE", form.targetCompany],
+      ["RESPONSÁVEL",        form.responsibleName || "-"],
+      ...(form.department ? [["ÁREA / DEPARTAMENTO", form.department] as [string, string]] : []),
+      ...(form.observations?.trim() ? [["OBSERVAÇÕES", form.observations] as [string, string]] : []),
+    ];
 
-  const headerHeight = pad + lh * 1.35 + lh * 1.15 + pad * 0.7;
-  const bodyHeight   = lh * 1.2 * (fields.length + extraLines) + pad;
-  const boxHeight    = Math.round(headerHeight + 1 + bodyHeight);
+    // Heights — pré-calcula linhas extras dos campos que podem quebrar em 2 linhas
+    const availW = boxWidth - pad * 2;
+    ctx.font = `400 ${bodySize}px system-ui, -apple-system, sans-serif`;
+    const referenciaValue = `REFERÊNCIA DE CONFORMIDADE: ${(form.questionnaireTitle || "-").toUpperCase()}`;
+    const referenciaLines = wrapText(ctx, referenciaValue, availW, 2);
+    const hasTitulo = !!form.evidenceTitle?.trim();
+    const tituloValue = hasTitulo
+      ? `REQUISITO / TÍTULO EXTERNO: ${form.evidenceTitle.toUpperCase()}`
+      : "REQUISITO / TÍTULO EXTERNO: -";
+    const tituloLines = wrapText(ctx, tituloValue, availW, 2);
+    const extraLines  = Math.max(0, referenciaLines.length - 1) + Math.max(0, tituloLines.length - 1);
 
-  const preferredOverlayCorner = form.overlayPosition;
-  const safeOverlayCorner = preferredOverlayCorner === (form.logoPosition ?? "bottom-left")
-    ? oppositeCorner(form.logoPosition ?? "bottom-left")
-    : preferredOverlayCorner;
+    const headerHeight = pad + lh * 1.35 + lh * 1.15 + pad * 0.7;
+    const bodyHeight   = lh * 1.2 * (fields.length + extraLines) + pad;
+    const boxHeight    = Math.round(headerHeight + 1 + bodyHeight);
 
-  const { x, y } = resolveOverlayCoordinates(
-    safeOverlayCorner,
-    width,
-    height,
-    boxWidth,
-    boxHeight,
-    margin,
-  );
+    const preferredOverlayCorner = form.overlayPosition;
+    const safeOverlayCorner = hasActiveLogo && preferredOverlayCorner === (form.logoPosition ?? "bottom-left")
+      ? oppositeCorner(form.logoPosition ?? "bottom-left")
+      : preferredOverlayCorner;
 
-  const isSolid = form.overlayBackgroundStyle === "solid";
-  const highOverlayOpacity = form.overlayOpacityMode === "high";
-  const blackOverlayText = form.overlayTextColor === "black";
+    const { x, y } = resolveOverlayCoordinates(
+      safeOverlayCorner,
+      width,
+      height,
+      boxWidth,
+      boxHeight,
+      margin,
+    );
 
-  /* Background body */
-  ctx.fillStyle = isSolid
-    ? highOverlayOpacity
-      ? "rgba(8, 18, 38, 0.72)"
-      : "rgba(8, 18, 38, 0.52)"
-    : highOverlayOpacity
-      ? "rgba(8, 18, 38, 0.52)"
-      : "rgba(8, 18, 38, 0.32)";
-  ctx.fillRect(x, y, boxWidth, boxHeight);
+    const isSolid = form.overlayBackgroundStyle === "solid";
+    const highOverlayOpacity = form.overlayOpacityMode === "high";
+    const blackOverlayText = form.overlayTextColor === "black";
 
-  /* Header tinted background */
-  ctx.fillStyle = isSolid
-    ? highOverlayOpacity
-      ? "rgba(18, 40, 78, 0.80)"
-      : "rgba(18, 40, 78, 0.58)"
-    : highOverlayOpacity
-      ? "rgba(18, 40, 78, 0.58)"
-      : "rgba(18, 40, 78, 0.38)";
-  ctx.fillRect(x, y, boxWidth, Math.round(headerHeight));
+    /* Background body */
+    ctx.fillStyle = isSolid
+      ? highOverlayOpacity
+        ? "rgba(8, 18, 38, 0.72)"
+        : "rgba(8, 18, 38, 0.52)"
+      : highOverlayOpacity
+        ? "rgba(8, 18, 38, 0.52)"
+        : "rgba(8, 18, 38, 0.32)";
+    ctx.fillRect(x, y, boxWidth, boxHeight);
 
-  /* Outer border */
-  ctx.strokeStyle = "rgba(96, 180, 255, 0.60)";
-  ctx.lineWidth = borderW;
-  ctx.strokeRect(
-    x + borderW / 2,
-    y + borderW / 2,
-    boxWidth - borderW,
-    boxHeight - borderW,
-  );
+    /* Header tinted background */
+    ctx.fillStyle = isSolid
+      ? highOverlayOpacity
+        ? "rgba(18, 40, 78, 0.80)"
+        : "rgba(18, 40, 78, 0.58)"
+      : highOverlayOpacity
+        ? "rgba(18, 40, 78, 0.58)"
+        : "rgba(18, 40, 78, 0.38)";
+    ctx.fillRect(x, y, boxWidth, Math.round(headerHeight));
 
-  /* Inner border (inset accent) */
-  ctx.strokeStyle = "rgba(96, 180, 255, 0.18)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + inset, y + inset, boxWidth - inset * 2, boxHeight - inset * 2);
+    /* Outer border */
+    ctx.strokeStyle = "rgba(96, 180, 255, 0.60)";
+    ctx.lineWidth = borderW;
+    ctx.strokeRect(
+      x + borderW / 2,
+      y + borderW / 2,
+      boxWidth - borderW,
+      boxHeight - borderW,
+    );
 
-  /* Separator line at header/body junction */
-  const sepY = y + Math.round(headerHeight);
-  ctx.strokeStyle = "rgba(96, 180, 255, 0.55)";
-  ctx.lineWidth = borderW;
-  ctx.beginPath();
-  ctx.moveTo(x, sepY);
-  ctx.lineTo(x + boxWidth, sepY);
-  ctx.stroke();
+    /* Inner border (inset accent) */
+    ctx.strokeStyle = "rgba(96, 180, 255, 0.18)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + inset, y + inset, boxWidth - inset * 2, boxHeight - inset * 2);
 
-  /* ── Header text ── */
-  ctx.textAlign = "center";
-  ctx.textBaseline = "alphabetic";
+    /* Separator line at header/body junction */
+    const sepY = y + Math.round(headerHeight);
+    ctx.strokeStyle = "rgba(96, 180, 255, 0.55)";
+    ctx.lineWidth = borderW;
+    ctx.beginPath();
+    ctx.moveTo(x, sepY);
+    ctx.lineTo(x + boxWidth, sepY);
+    ctx.stroke();
 
-  ctx.fillStyle = blackOverlayText ? "rgba(0, 0, 0, 0.92)" : "rgba(232, 244, 255, 0.85)";
-  ctx.font = `700 ${titleSize}px system-ui, -apple-system, sans-serif`;
-  const headerTitleRaw = (form.headerTitle && form.headerTitle.trim())
-    ? form.headerTitle.toUpperCase()
-    : "EVIDÊNCIA DE CONTROLE DE SEGURANÇA";
-  const titleText = fitText(ctx, headerTitleRaw, availW);
-  ctx.fillText(titleText, x + boxWidth / 2, y + pad + lh * 1.1);
+    /* ── Header text ── */
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
 
-  if (evidenceId) {
-    ctx.fillStyle = blackOverlayText ? "rgba(0, 0, 0, 0.84)" : "rgba(125, 211, 252, 0.80)";
-    ctx.font = `600 ${idSize}px system-ui, -apple-system, sans-serif`;
-    ctx.fillText(evidenceId, x + boxWidth / 2, y + pad + lh * 1.1 + lh * 1.2);
-  }
+    ctx.fillStyle = blackOverlayText ? "rgba(0, 0, 0, 0.92)" : "rgba(232, 244, 255, 0.85)";
+    ctx.font = `700 ${titleSize}px system-ui, -apple-system, sans-serif`;
+    const headerTitleRaw = (form.headerTitle && form.headerTitle.trim())
+      ? form.headerTitle.toUpperCase()
+      : "EVIDÊNCIA DE CONTROLE DE SEGURANÇA";
+    const titleText = fitText(ctx, headerTitleRaw, availW);
+    ctx.fillText(titleText, x + boxWidth / 2, y + pad + lh * 1.1);
 
-  /* ── Body fields ── */
-  ctx.textAlign = "left";
-  ctx.fillStyle = blackOverlayText ? "rgba(0, 0, 0, 0.86)" : "rgba(219, 234, 254, 0.78)";
-  ctx.font = `400 ${bodySize}px system-ui, -apple-system, sans-serif`;
-
-  const bodyStartY = sepY + lh * 1.1;
-  let yOff = 0;
-  fields.forEach(([label, value]) => {
-    if (label === "REFERÊNCIA DE CONFORMIDADE") {
-      referenciaLines.forEach((line, li) => {
-        ctx.fillText(li === 0 ? line : `  ${line}`, x + pad, bodyStartY + lh * 1.2 * yOff);
-        yOff++;
-      });
-    } else if (label === "REQUISITO / TÍTULO EXTERNO") {
-      tituloLines.forEach((line, li) => {
-        // Na primeira sub-linha já temos o label incluído; nas demais, apenas continuação
-        ctx.fillText(li === 0 ? line : `  ${line}`, x + pad, bodyStartY + lh * 1.2 * yOff);
-        yOff++;
-      });
-    } else {
-      const line = `${label}: ${value.toUpperCase()}`;
-      ctx.fillText(fitText(ctx, line, availW), x + pad, bodyStartY + lh * 1.2 * yOff);
-      yOff++;
+    if (evidenceId) {
+      ctx.fillStyle = blackOverlayText ? "rgba(0, 0, 0, 0.84)" : "rgba(125, 211, 252, 0.80)";
+      ctx.font = `600 ${idSize}px system-ui, -apple-system, sans-serif`;
+      ctx.fillText(evidenceId, x + boxWidth / 2, y + pad + lh * 1.1 + lh * 1.2);
     }
-  });
+
+    /* ── Body fields ── */
+    ctx.textAlign = "left";
+    ctx.fillStyle = blackOverlayText ? "rgba(0, 0, 0, 0.86)" : "rgba(219, 234, 254, 0.78)";
+    ctx.font = `400 ${bodySize}px system-ui, -apple-system, sans-serif`;
+
+    const bodyStartY = sepY + lh * 1.1;
+    let yOff = 0;
+    fields.forEach(([label, value]) => {
+      if (label === "REFERÊNCIA DE CONFORMIDADE") {
+        referenciaLines.forEach((line, li) => {
+          ctx.fillText(li === 0 ? line : `  ${line}`, x + pad, bodyStartY + lh * 1.2 * yOff);
+          yOff++;
+        });
+      } else if (label === "REQUISITO / TÍTULO EXTERNO") {
+        tituloLines.forEach((line, li) => {
+          // Na primeira sub-linha já temos o label incluído; nas demais, apenas continuação
+          ctx.fillText(li === 0 ? line : `  ${line}`, x + pad, bodyStartY + lh * 1.2 * yOff);
+          yOff++;
+        });
+      } else {
+        const line = `${label}: ${value.toUpperCase()}`;
+        ctx.fillText(fitText(ctx, line, availW), x + pad, bodyStartY + lh * 1.2 * yOff);
+        yOff++;
+      }
+    });
+  }
 
   /* ── Watermark text ────────────────────────────────────────────────── */
   if (form.watermarkEnabled && form.watermarkText.trim()) {
@@ -300,7 +305,7 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
   }
 
   /* ── Logo Slice (marca d'água, canto escolhido) ─────────────────────── */
-  if (logoImage && form.logoEnabled !== false) {
+  if (logoImage && hasActiveLogo) {
     const logoMargin = Math.max(16, Math.round(width * 0.018));
     const logoW = Math.round(width * 0.14);
     const logoH = Math.round(logoW * (logoImage.naturalHeight / logoImage.naturalWidth));
