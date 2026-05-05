@@ -27,10 +27,10 @@ export default async function LoginPage() {
               <p className="hero__eyebrow">Evidence Studio</p>
               <h1 className="hero__title">
                 Evidencias corporativas <br />
-                para <em> auditoria</em>.
+                para <em> auditoria e projetos</em>.
               </h1>
               <p className="hero__sub">
-                Padronize a emissao de evidencias para DPO, LGPD e SI com formato unico e rastreavel.
+                Padronize a emissão de evidências, abrangendo projetos, desenvolvimento e SI, de forma profissional e auditável.
               </p>
             </div>
           </div>
