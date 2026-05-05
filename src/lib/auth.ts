@@ -1,19 +1,11 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import bcrypt from "bcryptjs";
+import { Users } from "@/lib/db";
 
 const AUTH_COOKIE_NAME = "auth-token";
 const JWT_SECRET =
   process.env.JWT_SECRET || "slice_evidencias_secret_change_in_production";
-
-const DEFAULT_USER = {
-  userId: process.env.AUTH_USER_ID || "infra",
-  name: process.env.AUTH_NAME || "Infraestrutura TI",
-  role: "admin" as const,
-  username: process.env.AUTH_USERNAME || "infra",
-  email: process.env.AUTH_EMAIL || "infra@slice.global",
-};
-
-const DEFAULT_PASSWORD = process.env.AUTH_PASSWORD || "infra";
 const secretKey = new TextEncoder().encode(JWT_SECRET);
 
 export interface AuthUser {
@@ -52,17 +44,37 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   return verifyToken(token);
 }
 
-export function resolveUserFromCredentials(identifier: string, password: string): AuthUser | null {
+export async function resolveUserFromCredentials(
+  identifier: string,
+  password: string,
+): Promise<AuthUser | null> {
   const normalized = identifier.trim().toLowerCase();
-  const validIdentity =
-    normalized === DEFAULT_USER.username.toLowerCase() ||
-    normalized === DEFAULT_USER.email.toLowerCase();
+  let user = Users.findByEmail(normalized);
+  if (!user) {
+    user = Users.findByUsername(normalized);
+  }
 
-  if (!validIdentity || password !== DEFAULT_PASSWORD) {
+  if (!user) {
     return null;
   }
 
-  return DEFAULT_USER;
+  const userWithPassword = Users.findByIdWithPassword(user.id);
+  if (!userWithPassword) {
+    return null;
+  }
+
+  const passwordMatch = await bcrypt.compare(password, userWithPassword.password_hash);
+  if (!passwordMatch) {
+    return null;
+  }
+
+  return {
+    userId: user.id,
+    name: user.name,
+    role: user.role,
+    username: user.username,
+    email: user.email,
+  };
 }
 
 export { AUTH_COOKIE_NAME };

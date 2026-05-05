@@ -31,20 +31,27 @@ export function buildBatchKey(
 
 /**
  * Extrai a sigla de até 4 letras de um nome de empresa.
- * Ignora palavras com ≤2 caracteres (preposições como "DA", "DE", "DO", "S.A.").
+ * - Quando há ≥ 2 palavras com mais de 2 caracteres, usa as iniciais delas.
+ * - Quando há só 1 palavra "útil" (ex.: "SLICE"), usa as 3 primeiras letras
+ *   dela (evita siglas de uma única letra como "S").
  */
 export function companyAcronym(company: string): string {
-  const acronym = company
+  const words = company
     .trim()
     .toUpperCase()
     .replace(/[^A-Z\s]/g, "") // remove pontuação
     .split(/\s+/)
-    .filter((w) => w.length > 2)
-    .slice(0, 4)
-    .map((w) => w[0])
-    .join("");
+    .filter((w) => w.length > 2);
 
-  return acronym || "EV";
+  if (words.length === 0) {
+    return "EV";
+  }
+
+  if (words.length === 1) {
+    return words[0].slice(0, Math.min(4, words[0].length));
+  }
+
+  return words.slice(0, 4).map((w) => w[0]).join("");
 }
 
 /**

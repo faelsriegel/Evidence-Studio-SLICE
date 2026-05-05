@@ -54,10 +54,20 @@ export interface UserPreset {
   data: Partial<EvidenceFormData>;
 }
 
+export type RedactRegionType = "blur" | "pixelate" | "arrow" | "rect" | "erase" | "step" | "highlight" | "text";
+
+/**
+ * Região marcada na imagem para edição.
+ * - blur / pixelate / rect / erase / highlight: x,y = canto superior esquerdo; w,h positivos.
+ * - arrow: x,y = ponto inicial; w,h = delta até o ponto final (podem ser negativos).
+ * - step: x,y = centro do círculo numerado; w,h não utilizados.
+ * - text: x,y = posição da âncora (centro horizontal, baseline-ish); w,h não utilizados; `text` é o conteúdo.
+ */
 export interface RedactRegion {
   x: number;
   y: number;
   w: number;
   h: number;
-  type: "blur" | "pixelate";
+  type: RedactRegionType;
+  text?: string;
 }

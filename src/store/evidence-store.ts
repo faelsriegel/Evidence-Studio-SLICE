@@ -1,32 +1,29 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { buildBatchKey, generateEvidenceId } from "@/lib/evidence-id";
-import { formatDateInput } from "@/lib/utils";
 import { type EvidenceFormData, type SavedConfiguration, type UserPreset } from "@/types/evidence";
 
 const DEFAULT_SOURCE_COMPANY = "SLICE TECNOLOGIA DA INFORMACAO S.A.";
 const DEFAULT_SOURCE_CNPJ = "40.599.957/0001-10";
 
-const today = formatDateInput(new Date());
-
 export const defaultFormData: EvidenceFormData = {
   sourceCompany: DEFAULT_SOURCE_COMPANY,
   sourceCnpj: DEFAULT_SOURCE_CNPJ,
-  targetCompany: "",
+  targetCompany: "SLICE",
   questionnaireTitle: "",
   evidenceAcronym: "",
   forceSequence: false,
   manualSequence: "001",
   evidenceTitle: "",
-  evidenceNumber: "14.1",
-  imageDate: today,
+  evidenceNumber: "",
+  imageDate: "",
   imageTime: "",
-  responsibleName: "DPO",
-  department: "Seguranca da Informacao",
+  responsibleName: "",
+  department: "",
   observations: "",
-  overlayEnabled: true,
+  overlayEnabled: false,
   watermarkEnabled: true,
-  watermarkText: "USO EXCLUSIVO AUDITORIA",
+  watermarkText: "USO INTERNO",
   headerTitle: "EVIDÊNCIA DE CONTROLE DE SEGURANÇA",
   logoEnabled: true,
   logoVariant: "white" as const,

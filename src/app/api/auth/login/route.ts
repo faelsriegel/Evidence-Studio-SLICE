@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = resolveUserFromCredentials(String(identifier), String(password));
+    const user = await resolveUserFromCredentials(String(identifier), String(password));
     if (!user) {
       return NextResponse.json({ error: "Credenciais invalidas." }, { status: 401 });
     }

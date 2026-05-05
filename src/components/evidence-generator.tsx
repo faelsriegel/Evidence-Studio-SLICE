@@ -4,18 +4,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import NextImage from "next/image";
 import { useForm, useWatch } from "react-hook-form";
 import {
+  ArrowUpRight,
   BookmarkPlus,
   Building2,
   ChevronDown,
   Download,
+  Eraser,
   EyeOff,
   FileImage,
   Grid3X3,
+  Highlighter,
   ImageIcon,
+  ListOrdered,
   Maximize2,
   ShieldCheck,
+  Square,
   Stamp,
   Trash2,
+  Type,
   Undo2,
   Upload,
   X,
@@ -24,7 +30,7 @@ import { processEvidenceImage } from "@/lib/image-processing";
 import { resolveBestImageDate } from "@/lib/metadata";
 import { formatDateInput, formatTimeInput, sanitizeForFileName } from "@/lib/utils";
 import { defaultFormData, useEvidenceStore } from "@/store/evidence-store";
-import { type EvidenceFormData, type OverlayPosition, type RedactRegion } from "@/types/evidence";
+import { type EvidenceFormData, type OverlayPosition, type RedactRegion, type RedactRegionType } from "@/types/evidence";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -117,10 +123,39 @@ const positionOptions: { label: string; value: OverlayPosition }[] = [
   { label: "Inferior direito", value: "bottom-right" },
 ];
 
+const departmentOptions = [
+  "LEDGER SPECIALIST",
+  "LEDGER ENGINNER",
+  "CLOUD ENGINNER",
+  "SEGURANCA DA INFORMACAO",
+] as const;
+
+function normalizeUppercase(value: unknown) {
+  return typeof value === "string" ? value.toUpperCase() : value;
+}
+
 function buildDownloadName(form: EvidenceFormData, evidenceId?: string): string {
-  const number = sanitizeForFileName(form.evidenceNumber || "SEM_NUMERO");
   const auditor = sanitizeForFileName(form.targetCompany || "SEM_AUDITORA");
   const id = sanitizeForFileName(evidenceId || "SEM_ID");
+
+  // Quando o quadro de rótulo está desativado, o nome do arquivo segue um
+  // padrão compacto: EMPRESA_SEQUENCIAL_DATA_HORA-ANO.
+  if (form.overlayEnabled === false) {
+    const parts = (evidenceId ?? "").split("-");
+    // Formato do ID: PREFIX-MAJOR-MINOR-SEQ-YEAR → seq na posição 3, ano na 4.
+    const seq = sanitizeForFileName(parts[3] || "001");
+    const year = sanitizeForFileName(parts[4] || (form.imageDate?.split("-")[0] ?? ""));
+    const date = sanitizeForFileName(form.imageDate || "SEM_DATA");
+    const time = sanitizeForFileName((form.imageTime || "SEM_HORA").replace(":", ""));
+    const yearSuffix = year ? `-${year}` : "";
+    return `${auditor}_${seq}_${date}_${time}${yearSuffix}.png`;
+  }
+
+  const rawNumber = form.evidenceNumber?.trim();
+  if (!rawNumber) {
+    return `${auditor}_${id}.png`;
+  }
+  const number = sanitizeForFileName(rawNumber);
   return `EVIDENCIA_${number}_${auditor}_${id}.png`;
 }
 
@@ -146,6 +181,29 @@ function loadImage(file: File): Promise<HTMLImageElement> {
     };
     img.src = url;
   });
+}
+
+function resetEvidenceFields(data: EvidenceFormData): EvidenceFormData {
+  const normalizedResponsible = data.responsibleName?.trim().toUpperCase() || "";
+  const normalizedDepartment = data.department?.trim().toUpperCase() || "";
+
+  return {
+    ...data,
+    targetCompany: defaultFormData.targetCompany,
+    questionnaireTitle: "",
+    evidenceTitle: "",
+    evidenceNumber: "",
+    imageDate: "",
+    imageTime: "",
+    responsibleName: normalizedResponsible === "DPO" ? "" : data.responsibleName,
+    department: normalizedDepartment === "SEGURANCA DA INFORMACAO" ? "" : data.department,
+  };
+}
+
+function resolveInitialManualDepartment(data: EvidenceFormData) {
+  const currentDepartment = data.department?.trim().toUpperCase() || "";
+  return currentDepartment.length > 0
+    && !departmentOptions.includes(currentDepartment as (typeof departmentOptions)[number]);
 }
 
 export function EvidenceGenerator() {
@@ -182,9 +240,54 @@ export function EvidenceGenerator() {
 
   /* redact tool */
   const imgWrapperRef = useRef<HTMLDivElement>(null);
-  const [redactMode, setRedactMode] = useState<"blur" | "pixelate" | null>(null);
+  const [redactMode, setRedactMode] = useState<RedactRegionType | null>(null);
   const [redactRegions, setRedactRegions] = useState<RedactRegion[]>([]);
   const [drawing, setDrawing] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
+  const [draggingStep, setDraggingStep] = useState<number | null>(null);
+  const [draggingText, setDraggingText] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState<number | null>(null);
+
+  /* drag para reposicionar passos */
+  useEffect(() => {
+    if (draggingStep === null || !sourceImage) return;
+    const onMove = (e: MouseEvent) => {
+      const rect = imgWrapperRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const x = Math.round(((e.clientX - rect.left) / rect.width) * sourceImage.naturalWidth);
+      const y = Math.round(((e.clientY - rect.top) / rect.height) * sourceImage.naturalHeight);
+      setRedactRegions(rs =>
+        rs.map((r, i) => (i === draggingStep ? { ...r, x, y } : r)),
+      );
+    };
+    const onUp = () => setDraggingStep(null);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [draggingStep, sourceImage]);
+
+  /* drag para reposicionar textos */
+  useEffect(() => {
+    if (draggingText === null || !sourceImage) return;
+    const onMove = (e: MouseEvent) => {
+      const rect = imgWrapperRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const x = Math.round(((e.clientX - rect.left) / rect.width) * sourceImage.naturalWidth);
+      const y = Math.round(((e.clientY - rect.top) / rect.height) * sourceImage.naturalHeight);
+      setRedactRegions(rs =>
+        rs.map((r, i) => (i === draggingText ? { ...r, x, y } : r)),
+      );
+    };
+    const onUp = () => setDraggingText(null);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [draggingText, sourceImage]);
 
   /* listeners globais durante o desenho de regiao */
   useEffect(() => {
@@ -198,13 +301,22 @@ export function EvidenceGenerator() {
     };
     const onUp = () => {
       setDrawing(d => {
-        if (!d) return null;
-        const x = Math.min(d.sx, d.ex);
-        const y = Math.min(d.sy, d.ey);
-        const w = Math.abs(d.ex - d.sx);
-        const h = Math.abs(d.ey - d.sy);
-        if (w > 8 && h > 8 && redactMode) {
-          setRedactRegions(r => [...r, { x, y, w, h, type: redactMode }]);
+        if (!d || !redactMode) return null;
+        if (redactMode === "arrow") {
+          // arrow: mantém direção (delta pode ser negativo)
+          const dx = d.ex - d.sx;
+          const dy = d.ey - d.sy;
+          if (Math.hypot(dx, dy) > 10) {
+            setRedactRegions(r => [...r, { x: d.sx, y: d.sy, w: dx, h: dy, type: "arrow" }]);
+          }
+        } else {
+          const x = Math.min(d.sx, d.ex);
+          const y = Math.min(d.sy, d.ey);
+          const w = Math.abs(d.ex - d.sx);
+          const h = Math.abs(d.ey - d.sy);
+          if (w > 8 && h > 8) {
+            setRedactRegions(r => [...r, { x, y, w, h, type: redactMode }]);
+          }
         }
         return null;
       });
@@ -234,10 +346,14 @@ export function EvidenceGenerator() {
     control,
     setValue,
     reset,
-    formState: { errors },
   } = useForm<EvidenceFormData>({
     defaultValues: defaultFormData,
   });
+
+  const registerUppercase = <Name extends keyof EvidenceFormData>(name: Name) =>
+    register(name, {
+      setValueAs: (value) => normalizeUppercase(value) as EvidenceFormData[Name],
+    });
 
   const watchedValues = useWatch({ control });
   const currentValues: EvidenceFormData = useMemo(
@@ -248,12 +364,31 @@ export function EvidenceGenerator() {
     [watchedValues],
   );
 
+  const [isManualDepartment, setIsManualDepartment] = useState(() =>
+    resolveInitialManualDepartment(resetEvidenceFields(lastFormData)),
+  );
+
+  const selectedDepartmentOption = useMemo(() => {
+    if (isManualDepartment) {
+      return "__manual__";
+    }
+
+    const currentDepartment = currentValues.department?.trim() || "";
+    if (!currentDepartment) {
+      return "";
+    }
+
+    return departmentOptions.includes(currentDepartment as (typeof departmentOptions)[number])
+      ? currentDepartment
+      : "__manual__";
+  }, [currentValues.department, isManualDepartment]);
+
   useEffect(() => {
     if (initialized.current) {
       return;
     }
 
-    reset(lastFormData);
+    reset(resetEvidenceFields(lastFormData));
     initialized.current = true;
   }, [lastFormData, reset]);
 
@@ -264,6 +399,25 @@ export function EvidenceGenerator() {
 
     setLastFormData(currentValues);
   }, [currentValues, setLastFormData]);
+
+  // Durante interações em tempo real, omitimos regiões específicas do canvas
+  // para evitar flicker do data-URL (imagem escurecendo/preta entre frames).
+  // A visualização durante a edição fica por conta do overlay HTML.
+  const previewRegions = useMemo(() => {
+    let regions = redactRegions;
+
+    if (editingText !== null) {
+      regions = regions.filter((_, i) => i !== editingText);
+    }
+
+    // Enquanto arrasta passos, exclui todos os "step" do preview rasterizado
+    // para impedir recarga contínua da imagem a cada mousemove.
+    if (draggingStep !== null) {
+      regions = regions.filter((r) => r.type !== "step");
+    }
+
+    return regions;
+  }, [redactRegions, editingText, draggingStep]);
 
   const previewUrl = useMemo(() => {
     if (!sourceImage) {
@@ -280,12 +434,12 @@ export function EvidenceGenerator() {
         currentValues.forceSequence,
         currentValues.manualSequence,
       );
-      const canvas = processEvidenceImage({ image: sourceImage, form: currentValues, logoImage, redactRegions, evidenceId: previewId });
+      const canvas = processEvidenceImage({ image: sourceImage, form: currentValues, logoImage, redactRegions: previewRegions, evidenceId: previewId });
       return canvas.toDataURL("image/png", 1);
     } catch {
       return "";
     }
-  }, [sourceImage, currentValues, logoImage, redactRegions, peekEvidenceId]);
+  }, [sourceImage, currentValues, logoImage, previewRegions, peekEvidenceId]);
 
   const generatedName = useMemo(() => {
     const previewId = peekEvidenceId(
@@ -429,13 +583,13 @@ export function EvidenceGenerator() {
         <div>
           <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-sky-400 ring-1 ring-sky-500/20">
             <ShieldCheck size={10} />
-            DPO&nbsp;•&nbsp;LGPD&nbsp;•&nbsp;Seguranca da Informacao
+            Projetos&nbsp;•&nbsp;Financeiro&nbsp;•&nbsp;Compliance&nbsp;•&nbsp;Operacoes
           </span>
           <h1 className="text-base font-bold tracking-tight text-slate-50">
             Gerador Corporativo de Evidencias
           </h1>
           <p className="text-xs text-slate-400">
-            Padronize evidencias formais para auditoria, compliance e questionarios de seguranca.
+            Padronize evidencias formais para auditoria, governanca, prestacao de contas e controles internos.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -505,7 +659,7 @@ export function EvidenceGenerator() {
               onSubmit={onSubmit}
             >
               {/* Imagem */}
-              <Section title="Imagem" description="PNG, JPG ou JPEG · max 20 MB">
+              <Section title="Imagem da evidência" description="PNG, JPG ou JPEG · máx. 20 MB · data EXIF detectada automaticamente">
                 <label
                   htmlFor="file"
                   onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -564,99 +718,25 @@ export function EvidenceGenerator() {
                 </label>
               </Section>
 
-              {/* Essencial */}
-              <Section title="Dados da evidencia">
+              {/* Identificação da empresa emissora (colapsável) */}
+              <Section
+                title="Identificação da empresa"
+                description="Dados do emissor que aparecem no quadro"
+                collapsible
+                defaultOpen={false}
+              >
                 <FieldGrid>
-                  <F label="Empresa auditora" full>
-                    <Input id="targetCompany" placeholder="Digite o nome da empresa" {...register("targetCompany", { required: true })} />
-                    {errors.targetCompany && (
-                      <p className="text-[11px] text-rose-400">Campo obrigatorio.</p>
-                    )}
+                  <F label="Empresa emissora" full>
+                    <Input id="sourceCompany" placeholder="Digite o nome da empresa" {...registerUppercase("sourceCompany")} />
                   </F>
-                  <F label="Titulo do questionario" full>
-                    <Input id="questionnaireTitle" placeholder="Digite o titulo (opcional)" {...register("questionnaireTitle")} />
-                  </F>
-                  <F label="Titulo da evidencia" full>
-                    <Input id="evidenceTitle" placeholder="Digite o requisito ou titulo (opcional)" {...register("evidenceTitle")} />
-                  </F>
-                  <F label="Numero de controle">
-                    <Input id="evidenceNumber" placeholder="Digite o numero de controle" {...register("evidenceNumber", { required: true })} />
-                  </F>
-                  <F label="Data da imagem">
-                    <Input id="imageDate" type="date" {...register("imageDate", { required: true })} />
-                  </F>
-                  <F label="Hora da imagem">
-                    <Input
-                      id="imageTime"
-                      type="time"
-                      {...register("imageTime")}
-                    />
+                  <F label="CNPJ" full>
+                    <Input id="sourceCnpj" placeholder="00.000.000/0001-00" {...registerUppercase("sourceCnpj")} />
                   </F>
                 </FieldGrid>
-              </Section>
-
-              {/* Mais detalhes (colapsavel) */}
-              <Section title="Mais detalhes" description="Emissor, responsavel e sigla" collapsible defaultOpen={false}>
-                <FieldGrid>
-                  <F label="Empresa emissora">
-                    <Input id="sourceCompany" placeholder="Digite o nome da empresa" {...register("sourceCompany", { required: true })} />
-                  </F>
-                  <F label="CNPJ">
-                    <Input id="sourceCnpj" placeholder="00.000.000/0001-00" {...register("sourceCnpj")} />
-                  </F>
-                  <F label="Responsavel">
-                    <Input id="responsibleName" placeholder="Digite o nome do responsavel" {...register("responsibleName")} />
-                  </F>
-                  <F label="Area / Departamento">
-                    <Input id="department" placeholder="Digite a area ou departamento" {...register("department")} />
-                  </F>
-                  <F label="Observacoes" full>
-                    <Input id="observations" placeholder="Texto opcional para observacoes" {...register("observations")} />
-                  </F>
-                  <F label="Sigla do ID" hint="vazio = automatico" full>
-                    <Input id="evidenceAcronym" placeholder="Digite a sigla (opcional)" maxLength={6} {...register("evidenceAcronym")} />
-                  </F>
-                </FieldGrid>
-
-                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[12px] font-medium text-slate-200">Sequencial do ID</p>
-                      <p className="text-[11px] text-slate-500">
-                        Padrao: automatico por empresa + titulo + numero (independente da data).
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-slate-400">Forcar</span>
-                      <Switch
-                        checked={!!currentValues.forceSequence}
-                        onCheckedChange={(next) =>
-                          setValue("forceSequence", next, { shouldValidate: true })
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 grid gap-2 sm:grid-cols-[220px_1fr] sm:items-center">
-                    <Input
-                      id="manualSequence"
-                      type="number"
-                      min={1}
-                      max={999}
-                      step={1}
-                      disabled={!currentValues.forceSequence}
-                      placeholder="001"
-                      {...register("manualSequence")}
-                    />
-                    <p className="text-[11px] text-slate-500">
-                      Quando ativo, o final do ID usa este valor (ex.: 001, 002, 010).
-                    </p>
-                  </div>
-                </div>
               </Section>
 
               {/* Aparencia (colapsavel) */}
-              <Section title="Aparencia do quadro" description="Posicao, fundo, logo e marca d'agua" collapsible defaultOpen={false}>
+              <Section title="Aparência e marca d'água" description="Quadro de rótulo, logo, posições e marca d'água" collapsible defaultOpen={false}>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -677,7 +757,7 @@ export function EvidenceGenerator() {
                     id="headerTitle"
                     disabled={currentValues.overlayEnabled === false}
                     placeholder="EVIDENCIA DE CONTROLE DE SEGURANCA"
-                    {...register("headerTitle")}
+                    {...registerUppercase("headerTitle")}
                   />
                 </F>
                 <F label="Posicao do quadro" full>
@@ -839,7 +919,7 @@ export function EvidenceGenerator() {
                         <Input
                           id="watermarkText"
                           placeholder="Texto da marca d&apos;agua"
-                          {...register("watermarkText")}
+                          {...registerUppercase("watermarkText")}
                         />
                         <Select id="watermarkColorMode" {...register("watermarkColorMode")}>
                           <option value="light">Marca d&apos;agua clara</option>
@@ -848,6 +928,140 @@ export function EvidenceGenerator() {
                       </div>
                     )}
                   </div>
+              </Section>
+
+              {/* Evidência, responsável e identificação (colapsável, por último) */}
+              <Section
+                title="Evidência e responsável"
+                description="Dados da auditoria · responsável · sigla e sequencial do ID"
+                collapsible
+                defaultOpen={false}
+              >
+                {/* Auditoria */}
+                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Auditoria
+                  </p>
+                  <FieldGrid>
+                    <F label="Empresa auditora" full>
+                      <Input id="targetCompany" placeholder="Digite o nome da empresa" {...registerUppercase("targetCompany")} />
+                    </F>
+                    <F label="Título do questionário" full>
+                      <Input id="questionnaireTitle" placeholder="Digite o título do questionário" {...registerUppercase("questionnaireTitle")} />
+                    </F>
+                    <F label="Requisito / Título da evidência" full>
+                      <Input id="evidenceTitle" placeholder="Digite o requisito ou título" {...registerUppercase("evidenceTitle")} />
+                    </F>
+                    <F label="Número de controle">
+                      <Input id="evidenceNumber" placeholder="Ex.: 14.1" {...register("evidenceNumber")} />
+                    </F>
+                    <F label="Data da imagem">
+                      <Input id="imageDate" type="date" {...register("imageDate")} />
+                    </F>
+                    <F label="Hora da imagem">
+                      <Input id="imageTime" type="time" {...register("imageTime")} />
+                    </F>
+                  </FieldGrid>
+                </div>
+
+                {/* Responsável */}
+                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Responsável pela evidência
+                  </p>
+                  <FieldGrid>
+                    <F label="Nome do responsável">
+                      <Input id="responsibleName" placeholder="Digite o nome" {...registerUppercase("responsibleName")} />
+                    </F>
+                    <F label="Área / Departamento">
+                      <div className="space-y-2">
+                        <Select
+                          id="department"
+                          value={selectedDepartmentOption}
+                          onChange={(event) => {
+                            const nextValue = event.target.value;
+                            if (nextValue === "__manual__") {
+                              setIsManualDepartment(true);
+                              setValue("department", "", { shouldValidate: true });
+                              return;
+                            }
+
+                            setIsManualDepartment(false);
+                            setValue("department", nextValue, { shouldValidate: true });
+                          }}
+                        >
+                          <option value="" disabled>SELECIONE UMA ÁREA</option>
+                          {departmentOptions.map((option) => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                          <option value="__manual__">MANUAL</option>
+                        </Select>
+
+                        {isManualDepartment && (
+                          <Input
+                            id="department-manual"
+                            placeholder="Digite a área ou departamento"
+                            value={currentValues.department || ""}
+                            onChange={(event) =>
+                              setValue("department", event.target.value.toUpperCase(), { shouldValidate: true })
+                            }
+                          />
+                        )}
+                      </div>
+                    </F>
+                    <F label="Observações" full>
+                      <Input id="observations" placeholder="Texto opcional · ex.: tela do painel administrativo" {...registerUppercase("observations")} />
+                    </F>
+                  </FieldGrid>
+                </div>
+
+                {/* Identificação do ID */}
+                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Identificação do ID
+                  </p>
+                  <FieldGrid>
+                    <F label="Sigla do ID" hint="vazio = automático" full>
+                      <Input id="evidenceAcronym" placeholder="Ex.: SLI · vazio gera a partir da empresa" maxLength={6} {...registerUppercase("evidenceAcronym")} />
+                    </F>
+                  </FieldGrid>
+
+                  <div className="mt-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[12px] font-medium text-slate-200">Sequencial do ID</p>
+                        <p className="text-[11px] text-slate-500">
+                          Padrão: automático por empresa + título + número (independente da data).
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-slate-400">Forçar</span>
+                        <Switch
+                          checked={!!currentValues.forceSequence}
+                          onCheckedChange={(next) =>
+                            setValue("forceSequence", next, { shouldValidate: true })
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 sm:grid-cols-[220px_1fr] sm:items-center">
+                      <Input
+                        id="manualSequence"
+                        type="number"
+                        min={1}
+                        max={999}
+                        step={1}
+                        disabled={!currentValues.forceSequence}
+                        placeholder="001"
+                        {...register("manualSequence")}
+                      />
+                      <p className="text-[11px] text-slate-500">
+                        Quando ativo, o final do ID usa este valor (ex.: 001, 002, 010).
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </Section>
             </form>
           </CardContent>
@@ -914,6 +1128,85 @@ export function EvidenceGenerator() {
                   >
                     <Grid3X3 size={11} /> Pixelar
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setRedactMode(m => m === "erase" ? null : "erase")}
+                    title="Borracha inteligente — preenche a região com a cor do entorno"
+                    className={[
+                      "flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition",
+                      redactMode === "erase"
+                        ? "border-emerald-500 bg-emerald-500/15 text-emerald-300"
+                        : "border-slate-700 text-slate-400 hover:border-emerald-700 hover:text-emerald-300",
+                    ].join(" ")}
+                  >
+                    <Eraser size={11} /> Apagar
+                  </button>
+                  <span className="mx-1 h-4 w-px bg-slate-700" />
+                  <button
+                    type="button"
+                    onClick={() => setRedactMode(m => m === "highlight" ? null : "highlight")}
+                    title="Marca-texto amarelo — destaca sem esconder o conteúdo"
+                    className={[
+                      "flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition",
+                      redactMode === "highlight"
+                        ? "border-yellow-400 bg-yellow-400/15 text-yellow-300"
+                        : "border-slate-700 text-slate-400 hover:border-yellow-600 hover:text-yellow-300",
+                    ].join(" ")}
+                  >
+                    <Highlighter size={11} /> Marca-texto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRedactMode(m => m === "rect" ? null : "rect")}
+                    title="Quadro vermelho de ênfase"
+                    className={[
+                      "flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition",
+                      redactMode === "rect"
+                        ? "border-rose-500 bg-rose-500/15 text-rose-300"
+                        : "border-slate-700 text-slate-400 hover:border-rose-700 hover:text-rose-300",
+                    ].join(" ")}
+                  >
+                    <Square size={11} /> Quadro
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRedactMode(m => m === "arrow" ? null : "arrow")}
+                    title="Seta vermelha de ênfase"
+                    className={[
+                      "flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition",
+                      redactMode === "arrow"
+                        ? "border-rose-500 bg-rose-500/15 text-rose-300"
+                        : "border-slate-700 text-slate-400 hover:border-rose-700 hover:text-rose-300",
+                    ].join(" ")}
+                  >
+                    <ArrowUpRight size={11} /> Seta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRedactMode(m => m === "step" ? null : "step")}
+                    title="Passos numerados — clique para adicionar, arraste para mover"
+                    className={[
+                      "flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition",
+                      redactMode === "step"
+                        ? "border-rose-500 bg-rose-500/15 text-rose-300"
+                        : "border-slate-700 text-slate-400 hover:border-rose-700 hover:text-rose-300",
+                    ].join(" ")}
+                  >
+                    <ListOrdered size={11} /> Passos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRedactMode(m => m === "text" ? null : "text")}
+                    title="Texto vermelho bold com contorno branco"
+                    className={[
+                      "flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition",
+                      redactMode === "text"
+                        ? "border-rose-500 bg-rose-500/15 text-rose-300"
+                        : "border-slate-700 text-slate-400 hover:border-rose-700 hover:text-rose-300",
+                    ].join(" ")}
+                  >
+                    <Type size={11} /> Texto
+                  </button>
                   <div className="ml-auto flex items-center gap-1">
                     <button
                       type="button"
@@ -949,7 +1242,14 @@ export function EvidenceGenerator() {
                   )}
                   {redactMode && (
                     <div className="absolute left-3 top-3 z-10 rounded-md bg-slate-900/90 px-2.5 py-1 text-[11px] font-medium text-slate-300 ring-1 ring-slate-700">
-                      {redactMode === "blur" ? "Arraste para desfocar" : "Arraste para pixelar"}
+                      {redactMode === "blur" && "Arraste para desfocar"}
+                      {redactMode === "pixelate" && "Arraste para pixelar"}
+                      {redactMode === "erase" && "Arraste para apagar (preenche com o entorno)"}
+                      {redactMode === "rect" && "Arraste para criar um quadro vermelho"}
+                      {redactMode === "highlight" && "Arraste para destacar com marca-texto amarelo"}
+                      {redactMode === "arrow" && "Clique e arraste do ponto inicial até a ponta da seta"}
+                      {redactMode === "step" && "Clique para adicionar · arraste o círculo para mover · X para apagar"}
+                      {redactMode === "text" && "Clique para escrever · Enter confirma · arraste para mover"}
                     </div>
                   )}
                   <div className="relative inline-block leading-[0]" ref={imgWrapperRef}>
@@ -977,28 +1277,233 @@ export function EvidenceGenerator() {
                         e.preventDefault();
                         const rect = imgWrapperRef.current?.getBoundingClientRect();
                         if (!rect) return;
-                        const sx = Math.round(((e.clientX - rect.left) / rect.width) * sourceImage.naturalWidth);
-                        const sy = Math.round(((e.clientY - rect.top) / rect.height) * sourceImage.naturalHeight);
-                        setDrawing({ sx, sy, ex: sx, ey: sy });
+                        const px = Math.round(((e.clientX - rect.left) / rect.width) * sourceImage.naturalWidth);
+                        const py = Math.round(((e.clientY - rect.top) / rect.height) * sourceImage.naturalHeight);
+                        if (redactMode === "step") {
+                          setRedactRegions(r => [...r, { x: px, y: py, w: 0, h: 0, type: "step" }]);
+                          return;
+                        }
+                        if (redactMode === "text") {
+                          setRedactRegions(r => {
+                            const next = [...r, { x: px, y: py, w: 0, h: 0, type: "text" as const, text: "" }];
+                            setEditingText(next.length - 1);
+                            return next;
+                          });
+                          return;
+                        }
+                        setDrawing({ sx: px, sy: py, ex: px, ey: py });
                       }}
                     >
                       {/* Saved regions */}
-                      {sourceImage && redactRegions.map((r, i) => (
-                        <div
-                          key={i}
-                          className="absolute border-2 border-dashed"
-                          style={{
-                            left: `${(r.x / sourceImage.naturalWidth) * 100}%`,
-                            top: `${(r.y / sourceImage.naturalHeight) * 100}%`,
-                            width: `${(r.w / sourceImage.naturalWidth) * 100}%`,
-                            height: `${(r.h / sourceImage.naturalHeight) * 100}%`,
-                            borderColor: r.type === "blur" ? "#38bdf8" : "#f59e0b",
-                            backgroundColor: r.type === "blur" ? "rgba(56,189,248,0.12)" : "rgba(245,158,11,0.12)",
-                          }}
-                        />
-                      ))}
-                      {/* In-progress rect */}
-                      {drawing && sourceImage && (
+                      {sourceImage && redactRegions.map((r, i) => {
+                        const W = sourceImage.naturalWidth;
+                        const H = sourceImage.naturalHeight;
+                        if (r.type === "arrow") {
+                          const x1 = (r.x / W) * 100;
+                          const y1 = (r.y / H) * 100;
+                          const x2 = ((r.x + r.w) / W) * 100;
+                          const y2 = ((r.y + r.h) / H) * 100;
+                          return (
+                            <svg
+                              key={i}
+                              className="pointer-events-none absolute inset-0 h-full w-full"
+                              viewBox="0 0 100 100"
+                              preserveAspectRatio="none"
+                            >
+                              <line
+                                x1={x1} y1={y1} x2={x2} y2={y2}
+                                stroke="#dc2626" strokeWidth={0.4}
+                                vectorEffect="non-scaling-stroke"
+                                style={{ strokeWidth: 2 } as React.CSSProperties}
+                              />
+                            </svg>
+                          );
+                        }
+                        if (r.type === "step") {
+                          // Hit area só ativa em step mode (drag + delete).
+                          if (redactMode !== "step") return null;
+                          const radius = Math.max(18, W * 0.022);
+                          const sizePct = (2 * radius / W) * 100;
+                          const stepNumber = redactRegions
+                            .slice(0, i + 1)
+                            .reduce((acc, rr) => (rr.type === "step" ? acc + 1 : acc), 0);
+                          return (
+                            <div
+                              key={i}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setDraggingStep(i);
+                              }}
+                              className="group/step absolute rounded-full ring-2 ring-white/0 transition hover:ring-white/70"
+                              style={{
+                                left: `${(r.x / W) * 100}%`,
+                                top: `${(r.y / H) * 100}%`,
+                                width: `${sizePct}%`,
+                                aspectRatio: "1 / 1",
+                                transform: "translate(-50%, -50%)",
+                                cursor: draggingStep === i ? "grabbing" : "grab",
+                              }}
+                              title="Arraste para mover · X para apagar"
+                            >
+                              <div className="absolute inset-0 rounded-full bg-rose-600 shadow-[0_10px_26px_rgba(0,0,0,0.42)] ring-[3px] ring-white" />
+                              <span className="absolute inset-0 flex items-center justify-center font-black text-white" style={{ fontSize: "clamp(12px, 1.2vw, 20px)" }}>
+                                {stepNumber}
+                              </span>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRedactRegions(rs => rs.filter((_, j) => j !== i));
+                                }}
+                                title="Remover este passo"
+                                className="absolute -right-1 -top-1 flex h-5 w-5 -translate-y-1/2 translate-x-1/2 cursor-pointer items-center justify-center rounded-full bg-slate-900 text-white opacity-0 ring-2 ring-white shadow-lg transition hover:bg-rose-600 group-hover/step:opacity-100"
+                              >
+                                <X size={11} strokeWidth={3} />
+                              </button>
+                            </div>
+                          );
+                        }
+                        if (r.type === "text") {
+                          // Só mostra controles em modo "text"; fora dele, o texto já está
+                          // renderizado no canvas pelo previewUrl, então não precisamos pintar nada aqui.
+                          if (redactMode !== "text") return null;
+                          const isEditing = editingText === i;
+                          const fontPct = Math.max(2.4, 2.6); // ~mesma proporção do canvas
+                          return (
+                            <div
+                              key={i}
+                              className="group/text absolute"
+                              style={{
+                                left: `${(r.x / W) * 100}%`,
+                                top: `${(r.y / H) * 100}%`,
+                                transform: "translate(-50%, -50%)",
+                              }}
+                            >
+                              {isEditing ? (
+                                <input
+                                  autoFocus
+                                  value={r.text ?? ""}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setRedactRegions(rs =>
+                                      rs.map((rr, j) => (j === i ? { ...rr, text: v } : rr)),
+                                    );
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      // Se ficou vazio, remove
+                                      if (!(r.text ?? "").trim()) {
+                                        setRedactRegions(rs => rs.filter((_, j) => j !== i));
+                                      }
+                                      setEditingText(null);
+                                    } else if (e.key === "Escape") {
+                                      e.preventDefault();
+                                      if (!(r.text ?? "").trim()) {
+                                        setRedactRegions(rs => rs.filter((_, j) => j !== i));
+                                      }
+                                      setEditingText(null);
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    if (!(r.text ?? "").trim()) {
+                                      setRedactRegions(rs => rs.filter((_, j) => j !== i));
+                                    }
+                                    setEditingText(null);
+                                  }}
+                                  placeholder="Digite o texto…"
+                                  className="rounded-md border border-rose-500/60 bg-slate-900/40 px-2 py-1 text-center font-black uppercase text-rose-500 shadow-lg ring-2 ring-rose-500/40 outline-none backdrop-blur-sm placeholder:font-normal placeholder:normal-case placeholder:text-slate-400 placeholder:[text-shadow:none]"
+                                  style={{
+                                    fontSize: `clamp(14px, ${fontPct}vw, 28px)`,
+                                    minWidth: 140,
+                                    textShadow:
+                                      "-2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 2px 0 #fff, -2px 0 0 #fff, 2px 0 0 #fff, 0 -2px 0 #fff, 0 2px 0 #fff",
+                                  }}
+                                />
+                              ) : (
+                                <div
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setDraggingText(i);
+                                  }}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingText(i);
+                                  }}
+                                  title="Arraste para mover · duplo-clique para editar · X para remover"
+                                  style={{
+                                    fontSize: `clamp(14px, ${fontPct}vw, 28px)`,
+                                    cursor: draggingText === i ? "grabbing" : "grab",
+                                  }}
+                                  className="relative whitespace-nowrap rounded-md border-2 border-dashed border-rose-500/60 bg-rose-500/5 px-2 py-1 font-extrabold uppercase text-rose-400 select-none transition hover:bg-rose-500/10"
+                                >
+                                  {(r.text ?? "").trim() || "—"}
+                                  <button
+                                    type="button"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setRedactRegions(rs => rs.filter((_, j) => j !== i));
+                                    }}
+                                    title="Remover este texto"
+                                    className="absolute -right-2 -top-2 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full bg-slate-900 text-white opacity-0 ring-2 ring-white shadow-lg transition hover:bg-rose-600 group-hover/text:opacity-100"
+                                  >
+                                    <X size={11} strokeWidth={3} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+                        const colorMap: Record<string, { border: string; bg: string }> = {
+                          blur: { border: "#38bdf8", bg: "rgba(56,189,248,0.12)" },
+                          pixelate: { border: "#f59e0b", bg: "rgba(245,158,11,0.12)" },
+                          erase: { border: "#10b981", bg: "rgba(16,185,129,0.12)" },
+                          rect: { border: "#dc2626", bg: "rgba(220,38,38,0.10)" },
+                          highlight: { border: "#facc15", bg: "rgba(250,204,21,0.18)" },
+                        };
+                        const c = colorMap[r.type] ?? colorMap.blur;
+                        return (
+                          <div
+                            key={i}
+                            className="absolute border-2 border-dashed"
+                            style={{
+                              left: `${(r.x / W) * 100}%`,
+                              top: `${(r.y / H) * 100}%`,
+                              width: `${(r.w / W) * 100}%`,
+                              height: `${(r.h / H) * 100}%`,
+                              borderColor: c.border,
+                              backgroundColor: c.bg,
+                            }}
+                          />
+                        );
+                      })}
+                      {/* In-progress: rect or line preview */}
+                      {drawing && sourceImage && redactMode === "arrow" && (
+                        <svg
+                          className="pointer-events-none absolute inset-0 h-full w-full"
+                          viewBox="0 0 100 100"
+                          preserveAspectRatio="none"
+                        >
+                          <line
+                            x1={(drawing.sx / sourceImage.naturalWidth) * 100}
+                            y1={(drawing.sy / sourceImage.naturalHeight) * 100}
+                            x2={(drawing.ex / sourceImage.naturalWidth) * 100}
+                            y2={(drawing.ey / sourceImage.naturalHeight) * 100}
+                            stroke="#dc2626"
+                            strokeDasharray="1 1"
+                            vectorEffect="non-scaling-stroke"
+                            style={{ strokeWidth: 2 } as React.CSSProperties}
+                          />
+                        </svg>
+                      )}
+                      {drawing && sourceImage && redactMode !== "arrow" && (
                         <div
                           className="absolute border-2 border-dashed border-white/80 bg-white/10"
                           style={{

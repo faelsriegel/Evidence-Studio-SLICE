@@ -4,7 +4,7 @@ import { LoginForm } from "@/components/login-form";
 import { getCurrentUser } from "@/lib/auth";
 
 export const metadata = {
-  title: "Evidence Studio SLICE",
+  title: "Login",
   description: "Acesso ao Gerador de Evidencias",
 };
 
@@ -30,8 +30,7 @@ export default async function LoginPage() {
                 para <em> auditoria</em>.
               </h1>
               <p className="hero__sub">
-                Padronize a emissao de evidencias para DPO, LGPD e SI com
-                formato unico e rastreavel.
+                Padronize a emissao de evidencias para DPO, LGPD e SI com formato unico e rastreavel.
               </p>
             </div>
           </div>
