@@ -240,12 +240,26 @@ export function EvidenceGenerator() {
 
   /* redact tool */
   const imgWrapperRef = useRef<HTMLDivElement>(null);
+  const [wrapperWidth, setWrapperWidth] = useState(0);
   const [redactMode, setRedactMode] = useState<RedactRegionType | null>(null);
   const [redactRegions, setRedactRegions] = useState<RedactRegion[]>([]);
   const [drawing, setDrawing] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
   const [draggingStep, setDraggingStep] = useState<number | null>(null);
   const [draggingText, setDraggingText] = useState<number | null>(null);
   const [editingText, setEditingText] = useState<number | null>(null);
+
+  /* mede a largura exibida do wrapper para sincronizar o tamanho do
+     overlay de texto com o tamanho que o canvas vai gravar */
+  useEffect(() => {
+    const el = imgWrapperRef.current;
+    if (!el) return;
+    const update = () => setWrapperWidth(el.getBoundingClientRect().width);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
 
   /* drag para reposicionar passos */
   useEffect(() => {
@@ -416,8 +430,15 @@ export function EvidenceGenerator() {
       regions = regions.filter((r) => r.type !== "step");
     }
 
+    // Em modo "text", o overlay HTML é o único responsável por renderizar
+    // os textos (permite arrastar/editar). Se o canvas também desenhasse,
+    // veríamos um "fantasma" atrás. Fora desse modo, o canvas grava tudo.
+    if (redactMode === "text") {
+      regions = regions.filter((r) => r.type !== "text");
+    }
+
     return regions;
-  }, [redactRegions, editingText, draggingStep]);
+  }, [redactRegions, editingText, draggingStep, redactMode]);
 
   const previewUrl = useMemo(() => {
     if (!sourceImage) {
@@ -1372,7 +1393,26 @@ export function EvidenceGenerator() {
                           // renderizado no canvas pelo previewUrl, então não precisamos pintar nada aqui.
                           if (redactMode !== "text") return null;
                           const isEditing = editingText === i;
-                          const fontPct = Math.max(2.4, 2.6); // ~mesma proporção do canvas
+                          // Canvas usa naturalWidth * 0.04. A imagem é exibida com
+                          // largura = wrapperWidth, então o tamanho VISÍVEL no preview
+                          // deve ser wrapperWidth * 0.04 para bater 1:1 com o render.
+                          const overlayFontPx = Math.max(14, Math.round(wrapperWidth * 0.04));
+                          // Halo branco em px, equivalente ao haloPx do canvas (12% da fonte).
+                          const overlayHaloPx = Math.max(2, Math.round(overlayFontPx * 0.12));
+                          const h = overlayHaloPx;
+                          const overlayFontStyle: React.CSSProperties = {
+                            fontSize: `${overlayFontPx}px`,
+                            textShadow: [
+                              `${-h}px ${-h}px 0 #fff`,
+                              `${h}px ${-h}px 0 #fff`,
+                              `${-h}px ${h}px 0 #fff`,
+                              `${h}px ${h}px 0 #fff`,
+                              `${-h}px 0 0 #fff`,
+                              `${h}px 0 0 #fff`,
+                              `0 ${-h}px 0 #fff`,
+                              `0 ${h}px 0 #fff`,
+                            ].join(", "),
+                          };
                           return (
                             <div
                               key={i}
@@ -1417,12 +1457,10 @@ export function EvidenceGenerator() {
                                     setEditingText(null);
                                   }}
                                   placeholder="Digite o texto…"
-                                  className="rounded-md border border-rose-500/60 bg-slate-900/40 px-2 py-1 text-center font-black uppercase text-rose-500 shadow-lg ring-2 ring-rose-500/40 outline-none backdrop-blur-sm placeholder:font-normal placeholder:normal-case placeholder:text-slate-400 placeholder:[text-shadow:none]"
+                                  className="rounded-md border border-rose-500/60 bg-slate-900/40 px-2 py-1 text-center font-black text-rose-500 shadow-lg ring-2 ring-rose-500/40 outline-none backdrop-blur-sm placeholder:font-normal placeholder:text-slate-400 placeholder:[text-shadow:none]"
                                   style={{
-                                    fontSize: `clamp(14px, ${fontPct}vw, 28px)`,
+                                    ...overlayFontStyle,
                                     minWidth: 140,
-                                    textShadow:
-                                      "-2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 2px 0 #fff, -2px 0 0 #fff, 2px 0 0 #fff, 0 -2px 0 #fff, 0 2px 0 #fff",
                                   }}
                                 />
                               ) : (
@@ -1438,10 +1476,10 @@ export function EvidenceGenerator() {
                                   }}
                                   title="Arraste para mover · duplo-clique para editar · X para remover"
                                   style={{
-                                    fontSize: `clamp(14px, ${fontPct}vw, 28px)`,
+                                    ...overlayFontStyle,
                                     cursor: draggingText === i ? "grabbing" : "grab",
                                   }}
-                                  className="relative whitespace-nowrap rounded-md border-2 border-dashed border-rose-500/60 bg-rose-500/5 px-2 py-1 font-extrabold uppercase text-rose-400 select-none transition hover:bg-rose-500/10"
+                                  className="relative whitespace-nowrap rounded-md border-2 border-dashed border-rose-500/60 bg-rose-500/5 px-2 py-1 font-extrabold text-rose-400 select-none transition hover:bg-rose-500/10"
                                 >
                                   {(r.text ?? "").trim() || "—"}
                                   <button

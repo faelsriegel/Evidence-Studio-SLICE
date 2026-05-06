@@ -464,14 +464,19 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
         ctx.stroke(highlight);
         ctx.restore();
       } else if (region.type === "text") {
+        // Mantém a capitalização EXATA digitada pelo usuário — o overlay
+        // do preview também mostra a string crua, então preview e render
+        // ficam sempre sincronizados (sem fantasma minúsculo atrás).
         const value = (region.text ?? "").trim();
         if (!value) continue;
         const fontWeight = 900;
-        const fontSize = Math.max(24, Math.round(width * 0.028));
+        const fontSize = Math.max(32, Math.round(width * 0.04));
         // Espessura do halo branco em pixels. Como usamos cópias deslocadas
         // (não strokeText), o halo é totalmente EXTERNO ao glifo — não fecha
         // os miolos das letras mesmo em peso 900.
-        const haloPx = Math.max(3, Math.round(fontSize * 0.14));
+        // 12% do fontSize: outline bem visível (estilo ShareX) sem fechar
+        // as curvas internas estreitas do "S" e do "G".
+        const haloPx = Math.max(3, Math.round(fontSize * 0.12));
 
         ctx.save();
         ctx.font = `${fontWeight} ${fontSize}px system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif`;
