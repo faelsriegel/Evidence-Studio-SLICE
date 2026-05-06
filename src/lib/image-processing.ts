@@ -466,16 +466,17 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
       } else if (region.type === "text") {
         const value = (region.text ?? "").trim();
         if (!value) continue;
+        const fontWeight = 900;
         const fontSize = Math.max(24, Math.round(width * 0.028));
-        const outlineW = Math.max(4, Math.round(fontSize * 0.22));
+        // Espessura do halo branco em pixels. Como usamos cópias deslocadas
+        // (não strokeText), o halo é totalmente EXTERNO ao glifo — não fecha
+        // os miolos das letras mesmo em peso 900.
+        const haloPx = Math.max(3, Math.round(fontSize * 0.14));
 
         ctx.save();
-        ctx.font = `900 ${fontSize}px system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif`;
+        ctx.font = `${fontWeight} ${fontSize}px system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.lineJoin = "round";
-        ctx.lineCap = "round";
-        ctx.miterLimit = 2;
 
         // 1) Sombra projetada (cópia preta levemente deslocada e borrada)
         ctx.save();
@@ -487,12 +488,22 @@ export function processEvidenceImage({ image, form, logoImage, redactRegions, ev
         ctx.fillText(value, region.x, region.y);
         ctx.restore();
 
-        // 2) Outline branco nítido (sem sombra para não borrar)
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = outlineW;
-        ctx.strokeText(value, region.x, region.y);
+        // 2) Halo branco grosso por cópias deslocadas em 16 direções.
+        //    Diferente de strokeText, o branco fica SÓ por fora do glifo,
+        //    preservando os contadores internos das letras.
+        ctx.fillStyle = "#ffffff";
+        const steps = 16;
+        for (let s = 0; s < steps; s++) {
+          const angle = (s / steps) * Math.PI * 2;
+          ctx.fillText(
+            value,
+            region.x + Math.cos(angle) * haloPx,
+            region.y + Math.sin(angle) * haloPx,
+          );
+        }
 
-        // 3) Preenchimento vermelho bold por cima
+        // 3) Preenchimento vermelho bold por cima — fica perfeitamente
+        //    centrado e cobre qualquer sobreposição interna das cópias.
         ctx.fillStyle = "#dc2626";
         ctx.fillText(value, region.x, region.y);
         ctx.restore();
