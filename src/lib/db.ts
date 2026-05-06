@@ -102,8 +102,7 @@ function normalizePhone(value?: string) {
 }
 
 function withoutPassword(user: User): SafeUser {
-  const safe = { ...user } as User & { password_hash?: string };
-  delete safe.password_hash;
+  const { password_hash: _passwordHash, ...safe } = user;
   return safe;
 }
 
